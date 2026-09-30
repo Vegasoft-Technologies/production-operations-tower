@@ -1,0 +1,48 @@
+name: production-operations-tower
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    container_name: oee-mosquitto
+    restart: unless-stopped
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/usr/local/bin/oee-entrypoint.sh"]
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/docker-entrypoint.sh:/usr/local/bin/oee-entrypoint.sh:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -u \"$$MQTT_USERNAME\" -P \"$$MQTT_PASSWORD\" -t healthcheck -m ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  timescaledb:
+    image: timescale/timescaledb:2.21.3-pg16
+    container_name: oee-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TIMESCALE_USER}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD}
+      POSTGRES_DB: ${TIMESCALE_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./timescale/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TIMESCALE_USER} -d ${TIMESCALE_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  timescale_data:
