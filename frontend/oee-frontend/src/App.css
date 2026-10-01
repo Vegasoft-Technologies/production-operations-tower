@@ -4,3 +4,23 @@
   align-items: center;
   padding: 2rem;
 }
+
+/* Sağ üst köşedeki tema butonu */
+.tema-butonu {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.tema-butonu:hover {
+  border-color: var(--text);
+}
