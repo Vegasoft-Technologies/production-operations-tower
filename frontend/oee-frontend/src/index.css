@@ -1,0 +1,42 @@
+/* Açık tema (varsayılan) */
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+
+  font: 18px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Karanlık tema: <html data-theme="dark"> olduğunda */
+:root[data-theme='dark'] {
+  --text: #9ca3af;
+  --text-h: #f3f4f6;
+  --bg: #16171d;
+  --border: #2e303a;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  text-align: center;
+}
+
+h1 {
+  font-weight: 500;
+  font-size: 40px;
+  color: var(--text-h);
+  margin: 32px 0;
+}
+
+p {
+  margin: 0;
+}
