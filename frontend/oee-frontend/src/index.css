@@ -5,7 +5,7 @@
   --bg: #fff;
   --border: #e5e4e7;
 
-  font: 18px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 18px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
   color: var(--text);
   background: var(--bg);
