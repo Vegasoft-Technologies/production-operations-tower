@@ -21,10 +21,11 @@ else
   DOCKER="sudo docker"
 fi
 
-$DOCKER run --rm --network host \
+HT=$($DOCKER run --rm --network host \
   -e PGPASSWORD="$PASS" \
   timescale/timescaledb:2.21.3-pg16 \
-  psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -c \
-  "SELECT id, name FROM machines ORDER BY id; SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = 'telemetry';"
+  psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -tAc \
+  "SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = 'telemetry';")
+[ "$HT" = "1" ] || { echo "HATA: telemetry hypertable bulunamadı" >&2; exit 1; }
 
 echo "veritabanı dışarıdan erişildi, telemetry hypertable duruyor"
