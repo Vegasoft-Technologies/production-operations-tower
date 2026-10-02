@@ -10,8 +10,9 @@ CREATE TABLE IF NOT EXISTS machines (
 CREATE TABLE IF NOT EXISTS telemetry (
     time        TIMESTAMPTZ NOT NULL,
     machine_id  TEXT        NOT NULL REFERENCES machines (id),
-    counter     INTEGER,
-    status_bit  BOOLEAN,
+    counter         INTEGER,
+    reject_counter  INTEGER,
+    status_bit      BOOLEAN,
     source      TEXT        NOT NULL DEFAULT 'plc'
 );
 

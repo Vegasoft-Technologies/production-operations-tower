@@ -49,6 +49,7 @@ Ortak hesap
 
 Tablolar: machines, telemetry
   COUNTER1   -> telemetry.counter
+  hatalı parça -> telemetry.reject_counter
   STATUS_BIT -> telemetry.status_bit
   makine     -> hat-1
 EOF
