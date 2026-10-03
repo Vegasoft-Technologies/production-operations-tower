@@ -30,6 +30,7 @@ DURUS_SN = 2.0
 SURE_TOLERANS_SN = 0.5
 SAYIM_TOLERANS = 1
 HATA_ORANI = 20  # her 20. parca hatali
+HATA_PV = 32767  # REJECT_COUNTER'in PV'si; --pv sadece COUNTER1'i (C1) etkiler
 MAKS_BOSLUK_SN = 0.3     # durum sinirinda izin verilen okuma boslugu
 MAKS_IC_BOSLUK_SN = 1.5  # bundan uzun bosluk bir durusu gizleyebilir
 
@@ -49,7 +50,9 @@ def oku(client):
 
 def artis(once, sonra, pv):
     """Sayac artisi; PV'den sonra 0'a donmeyi hesaba katar."""
-    return (sonra - once) % (pv + 1)
+    # 32768 degil 32767: 32767 -> 0 gecisinde parca sayilmiyor.
+    # (Sayac R := Q ile bir sonraki taramada sifirlanir; genel olarak mod pv.)
+    return (sonra - once) % pv
 
 
 def main():
@@ -165,7 +168,7 @@ def main():
         else:
             # Durus: blok icindeki ilk ve son ornek arasinda sayac sabit kalmali
             d_top = artis(b[1][2], b[2][2], args.pv)
-            d_hata = artis(b[1][3], b[2][3], args.pv)
+            d_hata = artis(b[1][3], b[2][3], HATA_PV)
             ok = d_top == 0 and d_hata == 0
             print(f"[{'OK' if ok else 'HATA'}] Durusta COUNTER1 +{d_top}, "
                   f"REJECT_COUNTER +{d_hata} (beklenen 0)")
@@ -180,7 +183,7 @@ def main():
 
     # 4. Hatali <= toplam ve oran ~ 1/20
     toplam = sum(artis(a[2], b[2], args.pv) for a, b in zip(ornekler, ornekler[1:]))
-    hatali = sum(artis(a[3], b[3], args.pv) for a, b in zip(ornekler, ornekler[1:]))
+    hatali = sum(artis(a[3], b[3], HATA_PV) for a, b in zip(ornekler, ornekler[1:]))
     ok = hatali <= toplam
     print(f"[{'OK' if ok else 'HATA'}] Hatali artis ({hatali}) <= toplam artis ({toplam})")
     if not ok:

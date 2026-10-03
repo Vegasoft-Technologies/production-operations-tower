@@ -15,9 +15,6 @@ PROGRAM main
     HATA_DOLU : BOOL;
     C_PARCA : CTU;
     C_HATA : CTU;
-    URET : BOOL;
-    CTU0 : CTU;
-    CTU1 : CTU;
   END_VAR
 
 {
