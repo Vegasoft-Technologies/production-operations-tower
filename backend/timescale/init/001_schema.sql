@@ -8,12 +8,14 @@ CREATE TABLE IF NOT EXISTS machines (
 );
 
 CREATE TABLE IF NOT EXISTS telemetry (
-    time        TIMESTAMPTZ NOT NULL,
-    machine_id  TEXT        NOT NULL REFERENCES machines (id),
+    time            TIMESTAMPTZ NOT NULL,
+    machine_id      TEXT        NOT NULL REFERENCES machines (id),
+    -- Sayaç 32767'den 0'a döner, bu geçişte parça sayılmaz. 32768 değil.
+    -- PostgreSQL ve JavaScript: ((yeni - eski) % 32767 + 32767) % 32767
     counter         INTEGER,
     reject_counter  INTEGER,
     status_bit      BOOLEAN,
-    source      TEXT        NOT NULL DEFAULT 'plc'
+    source          TEXT        NOT NULL DEFAULT 'plc'
 );
 
 SELECT create_hypertable('telemetry', 'time', if_not_exists => TRUE);
