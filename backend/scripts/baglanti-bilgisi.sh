@@ -48,8 +48,8 @@ Ortak hesap
 - Anonim bağlantı: kapalı
 
 Tablolar: machines, telemetry
-  COUNTER1   -> telemetry.counter
-  hatalı parça -> telemetry.reject_counter
-  STATUS_BIT -> telemetry.status_bit
-  makine     -> hat-1
+  COUNTER1        -> telemetry.counter
+  REJECT_COUNTER  -> telemetry.reject_counter
+  STATUS_BIT      -> telemetry.status_bit
+  makine          -> hat-1
 EOF
