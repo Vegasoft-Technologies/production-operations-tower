@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ortam degiskenleri (IP, adres) GitHub'a girmesin
+.env
+.env.*
+!.env.example
