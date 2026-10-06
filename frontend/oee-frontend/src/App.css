@@ -68,6 +68,25 @@
   color: var(--stop) !important;
 }
 
+.durum-veri-yok {
+  color: var(--text) !important;
+}
+
+/* Gauge + değer kutuları */
+.canli {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: opacity 0.3s;
+}
+
+/* Veri gelmiyorken son değerler soluk görünür */
+.canli.soluk {
+  opacity: 0.4;
+}
+
 /* Sağ üst köşedeki tema butonu */
 .tema-butonu {
   position: fixed;

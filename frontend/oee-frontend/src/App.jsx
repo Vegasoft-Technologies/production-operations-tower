@@ -73,7 +73,16 @@ function App() {
     ],
   };
 
+  // 10 sn'dir veri yoksa son değerler artık güncel değil: soluk göster, durum "Veri yok"
+  const veriYok = stale || !latest;
   const calisiyor = latest?.status === true;
+
+  let durumMetni = 'Veri yok';
+  let durumSinifi = 'durum-veri-yok';
+  if (!veriYok) {
+    durumMetni = calisiyor ? 'Çalışıyor' : 'Duruşta';
+    durumSinifi = calisiyor ? 'durum-calisiyor' : 'durum-durusta';
+  }
 
   return (
     <div className="kapsayici">
@@ -98,24 +107,24 @@ function App() {
         </div>
       )}
 
-      <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400 }} />
+      <div className={veriYok ? 'canli soluk' : 'canli'}>
+        <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400, margin: '0 auto' }} />
 
-      <dl className="bilgiler">
-        <div>
-          <dt>Toplam üretim</dt>
-          <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
-        </div>
-        <div>
-          <dt>Hatalı üretim</dt>
-          <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
-        </div>
-        <div>
-          <dt>Makine durumu</dt>
-          <dd className={latest ? (calisiyor ? 'durum-calisiyor' : 'durum-durusta') : ''}>
-            {latest ? (calisiyor ? 'Çalışıyor' : 'Duruşta') : '—'}
-          </dd>
-        </div>
-      </dl>
+        <dl className="bilgiler">
+          <div>
+            <dt>Toplam üretim</dt>
+            <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
+          </div>
+          <div>
+            <dt>Hatalı üretim</dt>
+            <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
+          </div>
+          <div>
+            <dt>Makine durumu</dt>
+            <dd className={durumSinifi}>{durumMetni}</dd>
+          </div>
+        </dl>
+      </div>
     </div>
   );
 }

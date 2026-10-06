@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { counterIncrement, sumWindow } from '../src/lib/counter.js';
-import { parseTelemetry } from '../src/lib/telemetry.js';
+import { parseTelemetry, isMillisecondTimestamp } from '../src/lib/telemetry.js';
 
 test('normal artış', () => {
   assert.equal(counterIncrement(1234, 1235), 1);
@@ -40,4 +40,14 @@ test('bozuk ya da eksik mesajlar reddedilir', () => {
   assert.equal(parseTelemetry(JSON.stringify({ ...good, total_count: '12' })), null);
   const { reject_count: _r, ...missing } = good;
   assert.equal(parseTelemetry(JSON.stringify(missing)), null);
+});
+
+test('ts milisaniye olmalı, saniye gelirse mesaj reddedilir', () => {
+  const good = { factory: 'Factory_1', line: 'Production_Line_1', machine: 'Machine_1', ts: 1760180400000, status: true, total_count: 1234, reject_count: 61 };
+  assert.equal(isMillisecondTimestamp(1760180400000), true);
+  assert.equal(isMillisecondTimestamp(1760180400), false); // saniye
+  assert.equal(isMillisecondTimestamp(1760180400000.5), false); // ondalıklı
+  assert.equal(isMillisecondTimestamp('1760180400000'), false); // metin
+  assert.equal(parseTelemetry(JSON.stringify({ ...good, ts: 1760180400 })), null);
+  assert.deepEqual(parseTelemetry(JSON.stringify(good)), good);
 });

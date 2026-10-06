@@ -5,6 +5,7 @@ import { startMockSource } from '../lib/mockSource';
 
 const STALE_MS = 10_000; // bu süre veri gelmezse uyarı
 const WINDOW_MS = 60_000; // Gauge: son 60 saniye
+const RETRY_MS = 3_000; // tarayıcı yeniden denemeyi bırakırsa biz bu aralıkla yeniden açarız
 
 // SSE (EventSource) ile makine verisini dinler.
 // url boşsa ya da 'mock' ise sahte kaynak kullanılır.
@@ -47,14 +48,34 @@ export function useMachineStream(url) {
       return startMockSource(handle);
     }
 
-    const es = new EventSource(url);
-    es.onopen = () => setConnection('open');
-    es.onmessage = (event) => handle(event.data);
-    // Backend kapanınca tarayıcı otomatik yeniden dener; o sırada uyarı gösteririz
-    es.onerror = () => setConnection('error');
+    let es = null;
+    let retryTimer = null;
+    let stopped = false;
 
-    // Temizlik: bileşen kapanınca bağlantıyı kapat
-    return () => es.close();
+    const connect = () => {
+      es = new EventSource(url);
+      es.onopen = () => setConnection('open');
+      es.onmessage = (event) => handle(event.data);
+      es.onerror = () => {
+        setConnection('error');
+        // Ağ kesintisinde tarayıcı kendisi yeniden dener (readyState = CONNECTING).
+        // Ama backend hata kodu (ör. 503) döner ya da CORS eksikse bağlantıyı
+        // tamamen kapatır (readyState = CLOSED). O zaman biz yeniden açarız.
+        if (es.readyState === EventSource.CLOSED && !stopped) {
+          es.close();
+          retryTimer = setTimeout(connect, RETRY_MS);
+        }
+      };
+    };
+
+    connect();
+
+    // Temizlik: bileşen kapanınca bağlantıyı ve bekleyen denemeyi kapat
+    return () => {
+      stopped = true;
+      clearTimeout(retryTimer);
+      es?.close();
+    };
   }, [url, isMock]);
 
   // Her saniye saati güncelle → "10 sn'dir veri yok" kontrolü
