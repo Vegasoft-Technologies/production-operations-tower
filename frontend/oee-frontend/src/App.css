@@ -69,7 +69,7 @@
 }
 
 .durum-veri-yok {
-  color: var(--text) !important;
+  color: var(--text-h) !important;
 }
 
 /* Gauge + değer kutuları */
@@ -79,12 +79,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: opacity 0.3s;
 }
 
-/* Veri gelmiyorken son değerler soluk görünür */
-.canli.soluk {
+/* Veri gelmiyorken eski değerler (Gauge, sayaç kutuları) soluk görünür.
+   "Makine durumu" kutusu soluklaşmaz, "Veri yok" yazısı okunur kalır. */
+.soluk {
   opacity: 0.4;
+  transition: opacity 0.3s;
 }
 
 /* Sağ üst köşedeki tema butonu */

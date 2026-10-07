@@ -73,8 +73,10 @@ function App() {
     ],
   };
 
-  // 10 sn'dir veri yoksa son değerler artık güncel değil: soluk göster, durum "Veri yok"
-  const veriYok = stale || !latest;
+  // Bağlantı koptuysa ya da 10 sn'dir veri yoksa son değerler artık güncel değil:
+  // Gauge ve sayaç kutuları soluk, durumda "Veri yok"
+  const veriYok = connection === 'error' || stale || !latest;
+  const soluk = veriYok ? 'soluk' : undefined;
   const calisiyor = latest?.status === true;
 
   let durumMetni = 'Veri yok';
@@ -107,15 +109,17 @@ function App() {
         </div>
       )}
 
-      <div className={veriYok ? 'canli soluk' : 'canli'}>
-        <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400, margin: '0 auto' }} />
+      <div className="canli">
+        <div className={soluk} style={{ width: '100%' }}>
+          <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400, margin: '0 auto' }} />
+        </div>
 
         <dl className="bilgiler">
-          <div>
+          <div className={soluk}>
             <dt>Toplam üretim</dt>
             <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
           </div>
-          <div>
+          <div className={soluk}>
             <dt>Hatalı üretim</dt>
             <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
           </div>
