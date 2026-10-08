@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { useMachineStream } from './hooks/useMachineStream';
 import './App.css';
+
+const STREAM_URL = import.meta.env.VITE_STREAM_URL || 'mock';
+const IS_MOCK = STREAM_URL === 'mock';
 
 // Güneş simgesi (karanlık moddayken gösterilir: "açık moda dön")
 function GunesSimgesi() {
@@ -21,60 +25,66 @@ function AySimgesi() {
   );
 }
 
-// Bileşen (component): ekrana çizilen bir React fonksiyonu
 function App() {
-  // State: değişince ekranın yeniden çizilmesini sağlayan veri
-  const [deger, setDeger] = useState(50);
   // Sayfa her zaman açık temayla başlar
   const [karanlik, setKaranlik] = useState(false);
-
-  // useEffect: bileşen ekrana ilk geldiğinde bir kez çalışır
-  useEffect(() => {
-    const zamanlayici = setInterval(() => {
-      // 0-100 arası rastgele tam sayı
-      setDeger(Math.floor(Math.random() * 101));
-    }, 1000);
-
-    // Temizlik: bileşen kapanınca zamanlayıcıyı durdur
-    return () => clearInterval(zamanlayici);
-  }, []);
+  const { latest, perMinute, connection, stale, silentFor } = useMachineStream(STREAM_URL);
 
   // Tema değişince <html> etiketine data-theme yaz, CSS renkleri buna göre değişir
   useEffect(() => {
     document.documentElement.dataset.theme = karanlik ? 'dark' : 'light';
   }, [karanlik]);
 
+  // Uyarı metni: önce bağlantı hatası, sonra veri kesintisi
+  let uyari = null;
+  if (connection === 'error') {
+    uyari = 'Backend bağlantısı koptu, yeniden bağlanılıyor…';
+  } else if (stale) {
+    uyari = `${Math.floor(silentFor / 1000)} saniyedir yeni veri gelmiyor. ESP32 veya broker durmuş olabilir.`;
+  }
+
   // Gauge içindeki yazı renkleri temaya göre
   const yaziRengi = karanlik ? '#f3f4f6' : '#08060d';
   const ikinciRenk = karanlik ? '#9ca3af' : '#6b6375';
 
-  // ECharts "option" nesnesi: grafiğin tüm tanımı burada
+  // ECharts "option" nesnesi: son 60 sn'de üretilen parça (0–60)
   const option = {
     series: [
       {
         type: 'gauge',
         min: 0,
-        max: 100,
+        max: 60,
+        splitNumber: 6,
         progress: { show: true, width: 18 },
         axisLine: {
-          lineStyle: {
-            width: 18,
-            color: [[1, karanlik ? '#2e303a' : '#e5e4e7']],
-          },
+          lineStyle: { width: 18, color: [[1, karanlik ? '#2e303a' : '#e5e4e7']] },
         },
         pointer: { show: true },
         axisLabel: { color: ikinciRenk },
         detail: {
           valueAnimation: true,
-          formatter: '{value} %',
+          formatter: '{value}',
           fontSize: 32,
           color: yaziRengi,
         },
-        title: { offsetCenter: [0, '75%'], fontSize: 18, color: ikinciRenk },
-        data: [{ value: deger, name: 'OEE' }],
+        title: { offsetCenter: [0, '75%'], fontSize: 16, color: ikinciRenk },
+        data: [{ value: perMinute, name: 'parça / son 60 sn' }],
       },
     ],
   };
+
+  // Bağlantı koptuysa ya da 10 sn'dir veri yoksa son değerler artık güncel değil:
+  // Gauge ve sayaç kutuları soluk, durumda "Veri yok"
+  const veriYok = connection === 'error' || stale || !latest;
+  const soluk = veriYok ? 'soluk' : undefined;
+  const calisiyor = latest?.status === true;
+
+  let durumMetni = 'Veri yok';
+  let durumSinifi = 'durum-veri-yok';
+  if (!veriYok) {
+    durumMetni = calisiyor ? 'Çalışıyor' : 'Duruşta';
+    durumSinifi = calisiyor ? 'durum-calisiyor' : 'durum-durusta';
+  }
 
   return (
     <div className="kapsayici">
@@ -88,8 +98,37 @@ function App() {
       </button>
 
       <h1>OEE Gösterge Paneli</h1>
-      <ReactECharts option={option} style={{ height: 400, width: 400 }} />
-      <p>Değer her saniye rastgele güncelleniyor.</p>
+      <p className="makine-adi">
+        {latest ? `${latest.factory} / ${latest.line} / ${latest.machine}` : 'Veri bekleniyor…'}
+        {IS_MOCK && <span className="etiket">sahte veri</span>}
+      </p>
+
+      {uyari && (
+        <div className="uyari" role="alert">
+          {uyari}
+        </div>
+      )}
+
+      <div className="canli">
+        <div className={soluk} style={{ width: '100%' }}>
+          <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400, margin: '0 auto' }} />
+        </div>
+
+        <dl className="bilgiler">
+          <div className={soluk}>
+            <dt>Toplam üretim</dt>
+            <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
+          </div>
+          <div className={soluk}>
+            <dt>Hatalı üretim</dt>
+            <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
+          </div>
+          <div>
+            <dt>Makine durumu</dt>
+            <dd className={durumSinifi}>{durumMetni}</dd>
+          </div>
+        </dl>
+      </div>
     </div>
   );
 }
