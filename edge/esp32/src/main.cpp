@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <esp_sntp.h>
 #include <sys/time.h>
 #include <time.h>
 #include "secrets.h"
@@ -47,6 +48,10 @@ void connectWiFi() {
 }
  
 void syncTime() {
+     // Wokwi simulasyonu gercek zamandan yavas calisabiliyor ve sekme arka
+     // plandayken duraklayabiliyor; ESP32 saati bu yuzden geride kaliyor.
+     // NTP'yi 15 sn'de bir yenileyerek ts'yi gercek saate yakin tutuyoruz.
+    sntp_set_sync_interval(15000);
   configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC
   Serial.print("[NTP] saat aliniyor");
   time_t now = 0;
