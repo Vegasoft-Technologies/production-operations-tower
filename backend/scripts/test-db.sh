@@ -32,7 +32,14 @@ COL=$($DOCKER run --rm --network host \
   -e PGPASSWORD="$PASS" \
   timescale/timescaledb:2.21.3-pg16 \
   psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -tAc \
-  "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'telemetry' AND column_name = 'reject_counter';")
-[ "$COL" = "1" ] || { echo "şema değişti, docker compose down -v yapın" >&2; exit 1; }
+  "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'telemetry' AND column_name IN ('total_count', 'reject_count', 'status');")
+[ "$COL" = "3" ] || { echo "şema değişti, docker compose down -v yapın" >&2; exit 1; }
+
+FAC=$($DOCKER run --rm --network host \
+  -e PGPASSWORD="$PASS" \
+  timescale/timescaledb:2.21.3-pg16 \
+  psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -tAc \
+  "SELECT count(*) FROM machines WHERE id = 'Machine_1' AND factory = 'Factory_1' AND line = 'Production_Line_1';")
+[ "$FAC" = "1" ] || { echo "şema değişti, docker compose down -v yapın" >&2; exit 1; }
 
 echo "veritabanı dışarıdan erişildi, telemetry hypertable duruyor"

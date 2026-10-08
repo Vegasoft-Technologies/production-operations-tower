@@ -24,18 +24,20 @@ DB_PASS="${TIMESCALE_PASSWORD:-}"
 DB="${TIMESCALE_DB:-}"
 
 cat <<EOF
-NEŞE — Hafta 1 bağlantı
+NEŞE — bağlantı
 
 Kendi bilgisayarın (MQTT Explorer profili: OEE Broker, DBeaver)
 - MQTT host: localhost
 - MQTT port: 1883
 - DB host: localhost
 - DB port: 5432
+- SSE: http://127.0.0.1:8000/stream
 
 Ekip (Tailscale)
 - Adres: ${IP}
 - MQTT port: 1883
 - DB port: 5432
+- SSE: http://${IP}:8000/stream
 
 Ortak hesap
 - MQTT kullanıcı: ${USER}
@@ -43,13 +45,14 @@ Ortak hesap
 - Veritabanı: ${DB}
 - DB kullanıcı: ${DB_USER}
 - DB şifre: ${DB_PASS}
-- Test topic: ekip/hafta1/test
-- Mesaj: Neşe
+- Topic: Factory_1/Production_Line_1/Machine_1/data
 - Anonim bağlantı: kapalı
 
 Tablolar: machines, telemetry
-  COUNTER1        -> telemetry.counter
-  REJECT_COUNTER  -> telemetry.reject_counter
-  STATUS_BIT      -> telemetry.status_bit
-  makine          -> hat-1
+  total_count   -> telemetry.total_count
+  reject_count  -> telemetry.reject_count
+  status        -> telemetry.status
+  makine        -> Machine_1
+  hat           -> Production_Line_1
+  fabrika       -> Factory_1
 EOF
