@@ -13,8 +13,10 @@ from sse_starlette.sse import EventSourceResponse
 log = logging.getLogger("oee")
 
 TOPIC = os.environ.get("MQTT_TOPIC", "Factory_1/Production_Line_1/Machine_1/#")
+FIELDS = ("factory", "line", "machine", "ts", "status", "total_count", "reject_count")
 TS_MIN_MS = 1577836800000
 TS_MAX_MS = 4102444800000
+COUNTER_MAX = 32767
 
 subscribers: set[asyncio.Queue[str]] = set()
 loop: asyncio.AbstractEventLoop | None = None
@@ -33,54 +35,83 @@ def load_env() -> None:
             os.environ.setdefault(name.strip(), value.strip())
 
 
-def valid(msg: object) -> bool:
+def counter_ok(value: object) -> bool:
+    return type(value) is int and 0 <= value <= COUNTER_MAX
+
+
+def checked(msg: object, topic: str) -> dict | None:
     if not isinstance(msg, dict):
-        return False
+        return None
+    parts = topic.split("/")
+    if len(parts) < 3:
+        return None
     ts = msg.get("ts")
-    total = msg.get("total_count")
-    reject = msg.get("reject_count")
-    return (
-        isinstance(msg.get("factory"), str)
-        and isinstance(msg.get("line"), str)
-        and isinstance(msg.get("machine"), str)
+    if not (
+        msg.get("factory") == parts[0]
+        and msg.get("line") == parts[1]
+        and msg.get("machine") == parts[2]
         and type(ts) is int
         and TS_MIN_MS <= ts < TS_MAX_MS
         and type(msg.get("status")) is bool
-        and type(total) is int
-        and type(reject) is int
-    )
+        and counter_ok(msg.get("total_count"))
+        and counter_ok(msg.get("reject_count"))
+    ):
+        return None
+    return {key: msg[key] for key in FIELDS}
 
 
 def broadcast(data: str) -> None:
     for queue in list(subscribers):
-        queue.put_nowait(data)
+        try:
+            queue.put_nowait(data)
+        except Exception:
+            log.exception("akışa yazılamadı")
 
 
 def on_connect(client, _userdata, _flags, reason_code, _properties) -> None:
-    if reason_code == 0:
-        client.subscribe(TOPIC)
-        log.info("abone olundu: %s", TOPIC)
-        return
-    log.warning("broker bağlantısı reddedildi")
+    try:
+        if reason_code == 0:
+            client.subscribe(TOPIC)
+            log.info("abone olundu: %s", TOPIC)
+            return
+        log.warning("broker bağlantısı reddedildi")
+    except Exception:
+        log.exception("bağlantı kurulurken hata")
+
+
+def shown(message) -> tuple[str, str]:
+    try:
+        topic = message.topic
+    except Exception:
+        topic = "?"
+    payload = getattr(message, "payload", b"")
+    if isinstance(payload, bytes):
+        raw = payload.decode("utf-8", errors="replace")
+    else:
+        raw = str(payload)
+    return topic, raw
 
 
 def on_message(_client, _userdata, message) -> None:
+    topic, raw = "?", ""
     try:
-        msg = json.loads(message.payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        log.warning("bozuk mesaj")
-        return
-    if not valid(msg):
-        log.warning("sözleşmeye uymayan mesaj")
-        return
-    if loop is None:
-        return
-    data = json.dumps(msg, ensure_ascii=False, separators=(",", ":"))
-    loop.call_soon_threadsafe(broadcast, data)
+        topic, raw = shown(message)
+        log.info("topic=%s payload=%s", topic, raw)
+        clean = checked(json.loads(raw), topic)
+        if clean is None:
+            log.warning("sözleşmeye uymayan mesaj topic=%s payload=%s", topic, raw)
+            return
+        if loop is None:
+            return
+        data = json.dumps(clean, ensure_ascii=False, separators=(",", ":"))
+        loop.call_soon_threadsafe(broadcast, data)
+    except Exception:
+        log.exception("mesaj işlenemedi topic=%s payload=%s", topic, raw)
 
 
 def start_mqtt() -> None:
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.suppress_exceptions = True
     user = os.environ.get("MQTT_USERNAME", "")
     password = os.environ.get("MQTT_PASSWORD", "")
     if user:

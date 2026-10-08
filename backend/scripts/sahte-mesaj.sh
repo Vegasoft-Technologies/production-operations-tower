@@ -18,8 +18,8 @@ else
   BODY="{\"factory\":\"Factory_1\",\"line\":\"Production_Line_1\",\"machine\":\"Machine_1\",\"ts\":${TS},\"status\":true,\"total_count\":1234,\"reject_count\":61}"
 fi
 
-docker run --rm eclipse-mosquitto:2.0.22 mosquitto_pub \
+printf '%s' "$BODY" | docker run --rm -i eclipse-mosquitto:2.0.22 mosquitto_pub \
   -h host.docker.internal -p 1883 \
   -u "${MQTT_USERNAME:?}" -P "${MQTT_PASSWORD:?}" \
-  -t "$TOPIC" -m "$BODY"
+  -t "$TOPIC" -s
 echo "gonderildi"

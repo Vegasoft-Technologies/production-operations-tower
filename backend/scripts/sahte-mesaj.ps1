@@ -17,6 +17,6 @@ if ($Bozuk) {
   $body = "{""factory"":""Factory_1"",""line"":""Production_Line_1"",""machine"":""Machine_1"",""ts"":$ts,""status"":true,""total_count"":1234,""reject_count"":61}"
 }
 
-docker run --rm eclipse-mosquitto:2.0.22 mosquitto_pub -h host.docker.internal -p 1883 -u $env:MQTT_USERNAME -P $env:MQTT_PASSWORD -t "Factory_1/Production_Line_1/Machine_1/data" -m $body
+$body | docker run --rm -i eclipse-mosquitto:2.0.22 mosquitto_pub -h host.docker.internal -p 1883 -u $env:MQTT_USERNAME -P $env:MQTT_PASSWORD -t "Factory_1/Production_Line_1/Machine_1/data" -s
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "gonderildi"
