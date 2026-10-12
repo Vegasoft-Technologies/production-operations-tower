@@ -39,3 +39,9 @@ Bozuk mesaj servisi düşürmez:
 ```
 
 Topic: `Factory_1/Production_Line_1/Machine_1/data`
+
+Yalnızca sonu `/data` ile biten topic ekrana gider. Alt başlık atlanır. Sayaç ve OEE kuralları `docs/veri-sozlesmesi.md` dosyasında.
+
+```bash
+py -3 -m pytest
+```

@@ -39,8 +39,12 @@ def counter_ok(value: object) -> bool:
     return type(value) is int and 0 <= value <= COUNTER_MAX
 
 
+def data_topic(topic: str) -> bool:
+    return topic.endswith("/data")
+
+
 def checked(msg: object, topic: str) -> dict | None:
-    if not isinstance(msg, dict):
+    if not isinstance(msg, dict) or not data_topic(topic):
         return None
     parts = topic.split("/")
     if len(parts) < 3:
@@ -96,6 +100,8 @@ def on_message(_client, _userdata, message) -> None:
     topic, raw = "?", ""
     try:
         topic, raw = shown(message)
+        if not data_topic(topic):
+            return
         log.info("topic=%s payload=%s", topic, raw)
         clean = checked(json.loads(raw), topic)
         if clean is None:
