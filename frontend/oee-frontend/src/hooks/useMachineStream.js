@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { counterIncrement, sumWindow } from '../lib/counter';
+import { counterStep, sumWindow } from '../lib/counter';
 import { parseTelemetry } from '../lib/telemetry';
 import { startMockSource } from '../lib/mockSource';
 
@@ -29,12 +29,13 @@ export function useMachineStream(url) {
         console.warn('Sözleşmeye uymayan mesaj atlandı:', raw);
         return;
       }
-      console.log('Veri geldi:', msg);
-
       const prev = prevRef.current;
       if (prev) {
-        const inc = counterIncrement(prev.total_count, msg.total_count);
-        entriesRef.current.push({ ts: msg.ts, inc });
+        const { inc, outage } = counterStep(prev.total_count, msg.total_count, prev.ts, msg.ts);
+        // Kesinti adımı (10 sn'den uzun ara) ve bilinmeyen artış "son 60 sn"ye girmez
+        if (!outage && inc !== null) {
+          entriesRef.current.push({ ts: msg.ts, inc });
+        }
         // 60 sn'den eski kayıtları at
         entriesRef.current = entriesRef.current.filter((e) => e.ts > msg.ts - WINDOW_MS);
         setPerMinute(sumWindow(entriesRef.current, msg.ts, WINDOW_MS));

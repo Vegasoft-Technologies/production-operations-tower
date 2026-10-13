@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
-import ReactECharts from 'echarts-for-react';
 import { useMachineStream } from './hooks/useMachineStream';
+import RateGauge from './components/RateGauge';
+import OeeGauge from './components/OeeGauge';
+import PlantTree from './components/PlantTree';
+import { PLANT_TREE } from './data/plantTree';
+import { readSampleOee } from './lib/oeeSample';
+import { formatPercent } from './lib/gauge';
 import './App.css';
 
 const STREAM_URL = import.meta.env.VITE_STREAM_URL || 'mock';
@@ -28,6 +33,9 @@ function AySimgesi() {
 function App() {
   // Sayfa her zaman açık temayla başlar
   const [karanlik, setKaranlik] = useState(false);
+  const [seciliMakine, setSeciliMakine] = useState('Machine_1');
+  // Bu hafta örnek OEE değerleri; Hafta 4'te backend'den gelecek
+  const [oee] = useState(() => readSampleOee(window.location.search));
   const { latest, perMinute, connection, stale, silentFor } = useMachineStream(STREAM_URL);
 
   // Tema değişince <html> etiketine data-theme yaz, CSS renkleri buna göre değişir
@@ -43,36 +51,6 @@ function App() {
     uyari = `${Math.floor(silentFor / 1000)} saniyedir yeni veri gelmiyor. ESP32 veya broker durmuş olabilir.`;
   }
 
-  // Gauge içindeki yazı renkleri temaya göre
-  const yaziRengi = karanlik ? '#f3f4f6' : '#08060d';
-  const ikinciRenk = karanlik ? '#9ca3af' : '#6b6375';
-
-  // ECharts "option" nesnesi: son 60 sn'de üretilen parça (0–60)
-  const option = {
-    series: [
-      {
-        type: 'gauge',
-        min: 0,
-        max: 60,
-        splitNumber: 6,
-        progress: { show: true, width: 18 },
-        axisLine: {
-          lineStyle: { width: 18, color: [[1, karanlik ? '#2e303a' : '#e5e4e7']] },
-        },
-        pointer: { show: true },
-        axisLabel: { color: ikinciRenk },
-        detail: {
-          valueAnimation: true,
-          formatter: '{value}',
-          fontSize: 32,
-          color: yaziRengi,
-        },
-        title: { offsetCenter: [0, '75%'], fontSize: 16, color: ikinciRenk },
-        data: [{ value: perMinute, name: 'parça / son 60 sn' }],
-      },
-    ],
-  };
-
   // Bağlantı koptuysa ya da 10 sn'dir veri yoksa son değerler artık güncel değil:
   // Gauge ve sayaç kutuları soluk, durumda "Veri yok"
   const veriYok = connection === 'error' || stale || !latest;
@@ -86,8 +64,10 @@ function App() {
     durumSinifi = calisiyor ? 'durum-calisiyor' : 'durum-durusta';
   }
 
+  const oeeToplam = oee.availability * oee.performance * oee.quality;
+
   return (
-    <div className="kapsayici">
+    <div className="sayfa">
       <button
         className="tema-butonu"
         onClick={() => setKaranlik(!karanlik)}
@@ -97,38 +77,65 @@ function App() {
         {karanlik ? <GunesSimgesi /> : <AySimgesi />}
       </button>
 
-      <h1>OEE Gösterge Paneli</h1>
-      <p className="makine-adi">
-        {latest ? `${latest.factory} / ${latest.line} / ${latest.machine}` : 'Veri bekleniyor…'}
-        {IS_MOCK && <span className="etiket">sahte veri</span>}
-      </p>
+      <aside className="yan-menu">
+        <PlantTree nodes={PLANT_TREE} selectedId={seciliMakine} onSelect={setSeciliMakine} />
+      </aside>
 
-      {uyari && (
-        <div className="uyari" role="alert">
-          {uyari}
-        </div>
-      )}
+      <main className="kapsayici">
+        <h1>OEE Gösterge Paneli</h1>
+        <p className="makine-adi">
+          {latest ? `${latest.factory} / ${latest.line} / ${latest.machine}` : 'Veri bekleniyor…'}
+          {IS_MOCK && <span className="etiket">sahte veri</span>}
+        </p>
 
-      <div className="canli">
-        <div className={soluk} style={{ width: '100%' }}>
-          <ReactECharts option={option} style={{ height: 360, width: '100%', maxWidth: 400, margin: '0 auto' }} />
-        </div>
+        {uyari && (
+          <div className="uyari" role="alert">
+            {uyari}
+          </div>
+        )}
 
-        <dl className="bilgiler">
-          <div className={soluk}>
-            <dt>Toplam üretim</dt>
-            <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
+        <section className="bolum" aria-labelledby="canli-baslik">
+          <h2 id="canli-baslik">Canlı üretim</h2>
+          <div className="canli">
+            <div className={soluk} style={{ width: '100%' }}>
+              <RateGauge value={perMinute} dark={karanlik} />
+            </div>
+
+            <dl className="bilgiler">
+              <div className={soluk}>
+                <dt>Toplam üretim</dt>
+                <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
+              </div>
+              <div className={soluk}>
+                <dt>Hatalı üretim</dt>
+                <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
+              </div>
+              <div>
+                <dt>Makine durumu</dt>
+                <dd className={durumSinifi}>{durumMetni}</dd>
+              </div>
+            </dl>
           </div>
-          <div className={soluk}>
-            <dt>Hatalı üretim</dt>
-            <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
+        </section>
+
+        <section className="bolum" aria-labelledby="oee-baslik">
+          <h2 id="oee-baslik">
+            OEE <span className="etiket">örnek değerler</span>
+          </h2>
+          <div className="oee-grid">
+            <OeeGauge title="Availability" value={oee.availability} dark={karanlik} />
+            <OeeGauge title="Performance" value={oee.performance} dark={karanlik} />
+            <OeeGauge title="Quality" value={oee.quality} dark={karanlik} />
           </div>
-          <div>
-            <dt>Makine durumu</dt>
-            <dd className={durumSinifi}>{durumMetni}</dd>
-          </div>
-        </dl>
-      </div>
+          <p className="oee-toplam">
+            OEE = A × P × Q = <strong>{formatPercent(oeeToplam)}</strong>
+          </p>
+          <p className="renk-aciklama">
+            <span className="nokta kirmizi" /> %70 altı <span className="nokta sari" /> %70–85{' '}
+            <span className="nokta yesil" /> %85 ve üstü
+          </p>
+        </section>
+      </main>
     </div>
   );
 }
