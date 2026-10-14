@@ -60,6 +60,7 @@ include/secrets.h       Gerçek bilgiler (.gitignore'da, repoya girmez)
 2. Alt çubuktaki **✓ (Build)** ile derle.
 3. **F1 → Wokwi: Start Simulator**. Simülatör sekmesi görünür kalmalı, aksi hâlde simülasyon duraklayabilir.
 4. Wokwi Terminal'de her saniye `[PUB] {...}` satırı görünmeli.
+5. Aynı anda yalnızca bir simülatör açık olsun. İki simülatör aynı client ID (`esp32-machine-1`) ile bağlanınca broker birini düşürür ve aynı topic'e iki kaynak yazar.
 
 ESP32, bilgisayara `host.wokwi.internal` adresiyle ulaşır (Wokwi'nin VS Code eklentisindeki yerleşik Private Gateway). Güvenlik Duvarı'nda 502 portunu açmak gerekmedi.
 
@@ -88,7 +89,7 @@ ESP32 (Wokwi) --> host.wokwi.internal:1883 (yerel Mosquitto) --bridge, Tailscale
    remote_password <sifre>
    topic Factory_1/# out 0
    keepalive_interval 15
-   restart_timeout 2 10
+   restart_timeout 1 5
    ```
 2. `Restart-Service mosquitto`
 3. `secrets.h` içinde `MQTT_HOST` = `"host.wokwi.internal"`.

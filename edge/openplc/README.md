@@ -8,7 +8,7 @@ Fabrika ortamını simüle eden sanal PLC. Program bir makinenin çalışma/duru
 
 `ladder-proje/` (OpenPLC Editor v4, `main.ld`) aynı programın Ladder karşılığıdır. Editor'ün dahili simülatöründe (Device: `OpenPLC Simulator`) derlenir ve Debug ekranında izlenir. **İki dosya her zaman aynı mantığı içermelidir:** birinde yapılan değişiklik diğerine de uygulanır. Her rung, `uretim.st`'de aynı numaralı yorumla işaretli bölüme karşılık gelir.
 
-Hafta 2 notu: WSL varsayılan olarak portları yalnızca bu bilgisayarın `localhost` adresine açar. ESP32'nin ağdan erişebilmesi için WSL'in "mirrored" ağ moduna alınması (`%USERPROFILE%\.wslconfig` içinde `[wsl2]` altında `networkingMode=mirrored`) ve Windows Güvenlik Duvarı'nda 502 portuna izin verilmesi gerekir.
+Hafta 2 notu: ESP32 (Wokwi for VS Code), OpenPLC'ye `host.wokwi.internal:502` üzerinden bu bilgisayarın localhost'u ile ulaşır; WSL ağ modunu değiştirmek ya da Güvenlik Duvarı'nda 502'yi açmak gerekmez.
 
 ## Klasör yapısı
 
