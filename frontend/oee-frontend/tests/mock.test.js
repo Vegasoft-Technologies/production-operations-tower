@@ -31,7 +31,17 @@ test('10 dakikada 480 parça, her 20. parça hatalı → 24 hatalı', () => {
   const { produced, total, reject } = run(600);
   assert.equal(produced, 480);
   assert.equal(reject, 24);
-  // Sayaç 32760'tan başladığı için bir kez 32767 → 0 geçişi var; sözleşmeye göre
-  // bu geçiş parça sayılmaz, sayaçtan okunan toplam 479 olur (PLC'de de böyle).
-  assert.equal(total, 479);
+  // Sayaç 32760'tan başladığı için başa dönüş var; PLC gibi 32766 → 0 geçtiği için
+  // hiçbir parça kaybolmaz, sayaçtan okunan toplam da 480.
+  assert.equal(total, 480);
+});
+
+test('başa dönüşte 32767 hiç görünmez, 32766\'dan sonra 0 gelir', () => {
+  let state = { ...createMockState(), total: 32765 };
+  const seen = [];
+  for (let i = 0; i < 4; i++) {
+    state = mockStep(state).state;
+    seen.push(state.total);
+  }
+  assert.deepEqual(seen, [32766, 0, 1, 2]);
 });

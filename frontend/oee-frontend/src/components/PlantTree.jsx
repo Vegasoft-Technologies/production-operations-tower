@@ -37,7 +37,7 @@ function TreeNode({ node, depth, selectedId, onSelect }) {
         )}
         <button type="button" className="agac-ad" onClick={() => onSelect?.(node.id)}>
           <span className="agac-seviye">{node.level}</span>
-          <span>{node.id}</span>
+          <span translate="no">{node.id}</span>
         </button>
       </div>
       {hasChildren && open && (

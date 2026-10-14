@@ -83,8 +83,17 @@ function App() {
 
       <main className="kapsayici">
         <h1>OEE Gösterge Paneli</h1>
+        {/* Her metin kendi <span>'ında ve ayrı key'le: çeviri eklentileri düz metin
+            düğümlerini değiştirse bile React eski düğümü değil, yeni bir öğe çizer.
+            Topic adları (Factory_1 vb.) çevrilmesin diye translate="no". */}
         <p className="makine-adi">
-          {latest ? `${latest.factory} / ${latest.line} / ${latest.machine}` : 'Veri bekleniyor…'}
+          {latest ? (
+            <span key="yol" translate="no">
+              {`${latest.factory} / ${latest.line} / ${latest.machine}`}
+            </span>
+          ) : (
+            <span key="bekleniyor">Veri bekleniyor…</span>
+          )}
           {IS_MOCK && <span className="etiket">sahte veri</span>}
         </p>
 
