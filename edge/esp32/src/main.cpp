@@ -52,7 +52,8 @@ void syncTime() {
      // plandayken duraklayabiliyor; ESP32 saati bu yuzden geride kaliyor.
      // NTP'yi 15 sn'de bir yenileyerek ts'yi gercek saate yakin tutuyoruz.
     sntp_set_sync_interval(15000);
-  configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC
+       // Ilk sunucu IP ile (time.google.com): DNS calismasa da saat alinabilsin.
+     configTime(0, 0, "216.239.35.0", "pool.ntp.org", "time.google.com");  // UTC
   Serial.print("[NTP] saat aliniyor");
   time_t now = 0;
   for (int i = 0; i < 40 && now < 1700000000; i++) {  // 2023'ten once = senkron degil
