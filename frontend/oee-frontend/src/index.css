@@ -9,6 +9,7 @@
   --uyari-bg: #fef3c7;
   --uyari-text: #78350f;
   --uyari-border: #f59e0b;
+  --secili-bg: #f1eff5;
 
   font: 18px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
@@ -28,6 +29,7 @@
   --uyari-bg: #3a2a0a;
   --uyari-text: #fde68a;
   --uyari-border: #b45309;
+  --secili-bg: #262832;
   color-scheme: dark;
 }
 
