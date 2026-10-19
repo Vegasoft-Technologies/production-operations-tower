@@ -2,9 +2,9 @@
 
 Üretim izleme sisteminin operatör/yönetici ekranı. React + Vite + Apache ECharts.
 
-Backend'in SSE uç noktasından (`/stream`) makine verisini canlı alır; son 60 saniyede
-üretilen parçayı, toplam/hatalı üretimi, makine durumunu ve Availability / Performance /
-Quality göstergelerini gösterir. Soldaki ağaç menü ISA-95 hiyerarşisini
+Backend'in SSE uç noktasından (`/stream`) makine verisini ve oturum OEE değerlerini canlı alır;
+son 60 saniyede üretilen parçayı, makine durumunu, oturumun toplam/hatalı üretimini ve
+Availability / Performance / Quality göstergelerini gösterir. Altında trend grafikleri var. Soldaki ağaç menü ISA-95 hiyerarşisini
 (Fabrika > Hat > Makine) gösterir.
 
 ## Kurulum
@@ -52,23 +52,49 @@ Testler `tests/` klasöründe, Node'un kendi test aracıyla çalışır:
 | --- | --- |
 | `counter.test.js` | Sayaç kuralları (backend'deki pytest senaryolarıyla aynı) |
 | `gauge.test.js` | Gösterge renk eşikleri ve yüzde biçimi |
-| `telemetry.test.js` | Mesaj doğrulama (alanlar, tipler, ts milisaniye) |
-| `mock.test.js` | Sahte veri kaynağının PLC gibi davranması |
+| `telemetry.test.js` | Makine mesajı doğrulama (alanlar, tipler, ts milisaniye) |
+| `oeeMessage.test.js` | OEE mesajı doğrulama (oranlar 0–1, null'lar, oturum zamanları) |
+| `format.test.js` | Süre/saat biçimi, trend grafiğindeki "veri yok" aralıkları |
+| `mock.test.js` | Sahte veri kaynağı (PLC gibi davranış, örnek OEE mesajı) |
 
-## OEE göstergeleri
+## OEE göstergeleri ve oturum kartları
 
-Bu hafta değerler örnek (A %80, P %100, Q %95); gerçek değerler Hafta 4'te backend'den gelecek.
-Göstergeler 0–1 arası oran alır ve yüzdeye kendileri çevirir.
+Değerler backend'in aynı `/stream` bağlantısından gönderdiği `event: oee` mesajından gelir
+(5 sn'de bir). Makine mesajları isimsiz gelir (`onmessage`), OEE mesajı
+`addEventListener('oee', …)` ile dinlenir. Mesaj sözleşmeye göre denetlenir
+(`src/lib/oeeMessage.js`): oranlar 0–1, `performance`/`quality` null olabilir; uymayan mesaj atılır.
 
-Renkler: %70 altı kırmızı, %70–85 sarı, %85 ve üstü yeşil (`src/lib/gauge.js`).
-Renk, ekranda görünen tek ondalıklı yüzdeye göre seçilir: %70,0 sarı, %85,0 yeşil.
+- Göstergeler 0–1 arası oran alır ve yüzdeye kendileri çevirir. Hesaplanamayan değer "—" görünür.
+- Renkler: %70 altı kırmızı, %70–85 sarı, %85 ve üstü yeşil (`src/lib/gauge.js`).
+  Renk, ekranda görünen tek ondalıklı yüzdeye göre seçilir: %70,0 sarı, %85,0 yeşil.
+- **Toplam üretim** ve **Hatalı üretim** kartları ham sayacı değil, oturumun OEE hesabındaki
+  `total` ve `reject` değerini gösterir. Kartların altında oturumun başlangıç saati yazar.
+- Oturumda veri kesintisi olduysa kartın altında not çıkar: veri yok süresi ve kesintide
+  üretilip OEE dışında kalan parça (`no_data_seconds`, `gap_parts`).
+- `session_end` doluysa oturum kapanmıştır: kartlar son oturumu gösterir ve "Oturum kapandı" notu çıkar.
+- 15 sn'dir OEE mesajı gelmezse ya da bağlantı koparsa değerler soluk görünür.
 
-Farklı değerleri denemek için adres çubuğundan verilebilir (a = Availability, p = Performance, q = Quality):
+### Sahte veri seçenekleri
+
+`VITE_STREAM_URL=mock` iken sahte kaynak 5 sn'de bir sabit örnek OEE mesajı gönderir
+(A %80, P %100, Q %95, Toplam 480, Hatalı 24). Adres çubuğundan değiştirilebilir:
 
 ```
-http://localhost:5173/?a=0.65&p=0.76&q=0.95   → kırmızı, sarı, yeşil
-http://localhost:5173/?a=0.70&p=0.85&q=0.95   → sarı, yeşil, yeşil
+http://localhost:5173/?a=0.65&p=0.76&q=0.95   → göstergeler kırmızı, sarı, yeşil
+http://localhost:5173/?a=0.70&p=0.85&q=0.95   → sarı (tam %70), yeşil (tam %85), yeşil
+http://localhost:5173/?oturum=kapali           → "Oturum kapandı" notu
+http://localhost:5173/?kesinti=1               → veri kesintisi notu (86 sn, 69 parça)
 ```
+
+Hatalı sayısı Quality ile tutarlı seçilir: (Toplam − Hatalı) ÷ Toplam = Quality.
+
+## Trend grafikleri (taslak)
+
+OEE ve A, P, Q için zamana göre çizgi grafik, üretim adedi için alan grafik
+(`src/components/TrendCharts.jsx`). Bu hafta örnek sabit veriyle çalışır
+(`src/data/trendSample.js`). Veri olmayan aralıklar `null`'dır: çizgi orada kopar
+(`connectNulls: false`) ve gri "veri yok" bandı çizilir. Grafiğin altındaki
+"Tablo olarak göster" aynı veriyi tablo halinde gösterir.
 
 ## Sayaç kuralları (özet)
 
@@ -89,13 +115,18 @@ src/
     OeeGauge.jsx           A / P / Q göstergesi (tek bileşen, 3 kez kullanılıyor)
     RateGauge.jsx          "Son 60 sn" parça göstergesi
     PlantTree.jsx          ISA-95 ağaç menü
+    TrendCharts.jsx        Trend grafikleri (çizgi + alan)
   data/plantTree.js        Ağaç verisi (şimdilik sabit, Hafta 7'de backend'den)
-  hooks/useMachineStream.js  SSE bağlantısı, yeniden bağlanma, veri kesintisi
+  data/trendSample.js      Trend grafikleri için örnek veri
+  hooks/useMachineStream.js  SSE bağlantısı (makine + oee olayları), yeniden bağlanma, veri kesintisi
   lib/
     counter.js             Sayaç kuralları
     gauge.js               Renk ve yüzde biçimi
-    telemetry.js           Mesaj doğrulama
-    mockSource.js          Sahte veri kaynağı
+    telemetry.js           Makine mesajı doğrulama
+    oeeMessage.js          OEE mesajı doğrulama
+    format.js              Süre ve saat biçimi
+    trend.js               Trend grafiği yardımcıları
+    mockSource.js          Sahte veri kaynağı (makine + OEE mesajı)
     oeeSample.js           Örnek OEE değerleri
 tests/                     Otomatik testler
 ```
