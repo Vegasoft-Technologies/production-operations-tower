@@ -2,7 +2,7 @@
 
 Makine mesajlarının biçimini, sayaç artışının nasıl hesaplandığını, üretim oturumlarını ve OEE'nin nasıl bulunduğunu tanımlar. IoT, Backend ve Frontend aynı kurala bu dosyadan bakar. Kodda bu kurallara referans verirken bu dosyayı gösterin.
 
-**Sürüm:** Hafta 4 (19 Ekim 2026) · **Sorumlu:** Proje Yöneticisi
+**Sürüm:** Hafta 4 (19 Ekim 2026, 20 Ekim düzeltmesi) · **Sorumlu:** Proje Yöneticisi
 
 > Sayaç kuralı geçicidir. Hafta 5'te PLC'ye 32-bit sayaçlar ve PLC'nin kendi çalışma süresi sayacı eklenecek, bu bölüm o zaman yeniden yazılacak.
 
@@ -87,7 +87,7 @@ Ekibin çalışma saatleri sabit olmadığı için planlı süreyi vardiya takvi
 - 1 saatten uzun veri gelmezse oturum son mesajın ts'inde kendiliğinden kapanır. Sonra gelen ilk mesaj yeni bir oturum açar. Bu yüzden 1 saati aşan bir kesinti hiçbir oturumun içinde kalmaz.
 - Aynı makinede aynı anda tek açık oturum olur.
 - Oturum kaydı: başlangıç ve bitiş (oturum açıkken boş).
-- Veri kesildiğinde oturum 1 saat boyunca açık kalır. Bu sürede planlı süre işlemeye devam ettiği için ekrandaki Availability düşer. Oturum kapanınca planlı süre son mesaja çekilir ve değerler düzelir.
+- Veri 10 sn'den uzun kesilirse oturum 1 saat boyunca açık kalır ve planlı süre şu ana kadar işler. Bu yüzden ekrandaki Availability düşer. Oturum kapanınca planlı süre son mesaja çekilir ve değerler düzelir.
 - Elle oturum başlatıp bitirme (iş emri gibi) Hafta 11'de operatör ekranıyla eklenebilir (Bölüm 7).
 
 ### 4.2 OEE hesabı
@@ -95,9 +95,9 @@ Ekibin çalışma saatleri sabit olmadığı için planlı süreyi vardiya takvi
 Hesap, bir oturumun mesajları üzerinden yapılır. OEE fonksiyonları MQTT'ye ve veritabanına bağlı değildir. Mesaj listesini ve planlı süreyi dışarıdan alır. Backend hesabı her seferinde veritabanındaki mesajlardan yapar, bellekte biriktirmez.
 
 - Her mesajın `status` değeri, bir sonraki mesaja kadar geçen süre için geçerlidir.
-- **Planlı süre** = oturumun başından sonuna (oturum açıksa şu ana) kadar geçen süre. Planlı duruş ve kısa duruş eşiği yoktur, bütün duruşlar Availability'den düşer.
+- **Planlı süre** = oturumun başından sonuna kadar geçen süre. Oturum kapandıysa sonu `session_end`'dir. Oturum açıksa sonu son mesajın ts'idir, ama son mesajdan bu yana 10 sn'den uzun süre geçtiyse şu andır ve aradaki süre veri yok sayılır. Böylece saniyede bir gelen verinin iki mesajı arasındaki an veri yok görünmez ve değerler mesajlar arasında oynamaz. Planlı duruş ve kısa duruş eşiği yoktur, bütün duruşlar Availability'den düşer.
 - **Çalışma süresi** = `status` true olan normal adımların süresi. ts geriye giden bir adımın süresi 0 alınır.
-- **Veri yok süresi** = planlı süre − normal adımların süresi. Kesinti adımlarını ve oturum açıkken son mesajdan bu yana geçen süreyi kapsar. Planlı sürede kalır ama çalışma süresine girmez: ne olduğunu bilmediğimiz süreyi çalıştı ya da durdu sayamayız.
+- **Veri yok süresi** = planlı süre − normal adımların süresi. Kesinti adımlarını ve oturum açıkken son mesajdan bu yana 10 sn'den uzun süre geçtiyse o süreyi kapsar. Planlı sürede kalır ama çalışma süresine girmez: ne olduğunu bilmediğimiz süreyi çalıştı ya da durdu sayamayız.
 - **İdeal çevrim süresi** = 1 sn (PLC çalışırken saniyede 1 parça üretir).
 - **Toplam** = normal adımlardaki `total_count` artışları. **Hatalı** = normal adımlardaki `reject_count` artışları. **İyi** = Toplam − Hatalı. İyi eksi çıkarsa 0 alınır.
 - Kesinti adımlarındaki `total_count` artışları OEE'ye girmez. Bu parçalar OEE mesajında `gap_parts` olarak gösterilir ve veritabanındaki toplam üretime eklenir.
@@ -149,8 +149,10 @@ data: {"factory":"Factory_1","line":"Production_Line_1","machine":"Machine_1","t
 | `oee` | sayı | 0–1 |
 | `total` | integer | Oturumun OEE hesabındaki Toplam |
 | `reject` | integer | Oturumun OEE hesabındaki Hatalı |
-| `no_data_seconds` | sayı | Oturumdaki veri yok süresi, saniye |
+| `no_data_seconds` | integer | Oturumdaki veri yok süresi, saniye. Tam sayıya yuvarlanır, eksi olamaz |
 | `gap_parts` | integer | Kesinti adımlarında üretilip OEE dışında kalan parça |
+
+Zaman alanları (`ts`, `session_start`, `session_end`), `total`, `reject`, `gap_parts` ve `no_data_seconds` tam sayı gönderilir. Python'da zaman için `int(time.time() * 1000)` kullanılabilir. Ondalıklı ya da eksi bir değer gelirse ekran mesajı atlar.
 
 Geçersiz OEE mesajı ekranda atlanır. Ekran çökmez, önceki değerler değişmez.
 
@@ -191,6 +193,7 @@ Oturum ve OEE (Backend):
 6. Hatalı, Toplam'dan büyük gelirse hesap çökmez, İyi 0 alınır, Quality 0 olur ve log'a uyarı düşer.
 7. Kesintili oturum: 10 dakikalık oturumda makine hep çalışıyor, hatalı yok, ortada 86 sn veri gelmiyor. Planlı süre 600 sn, çalışma süresi 514 sn, veri yok süresi 86 sn, `gap_parts` 86. Availability %85,7, Performance %100, Quality %100, OEE %85,7.
 8. Oturumun açılıp kapanması: açık oturum yokken gelen ilk geçerli mesaj yeni bir oturum açar ve oturumun başlangıcı bu mesajın ts'i olur. Son mesajdan sonra 1 saat veri gelmezse oturum son mesajın ts'inde kapanır. Sonra gelen ilk mesaj yeni bir oturum açar.
+9. Açık oturumda hesap zamanı: Test 1'deki oturum açıkken son mesajdan 3 sn sonra hesaplanırsa planlı süre 600 sn, veri yok süresi 0, OEE %76. Son mesajdan 15 sn sonra hesaplanırsa planlı süre 615 sn, veri yok süresi 15 sn, Availability %78,0, OEE %74,1.
 
 ## 7. Açık konular
 
@@ -206,3 +209,4 @@ Oturum ve OEE (Backend):
 | Hafta 2 | Ekim 2026 | İlk sürüm: alanlar ve tipler, 5'ten büyük artış sıfırlanma sayılır. |
 | Hafta 3 | 12 Ekim 2026 | Sınır geçen süreye bağlandı (süre + 4), veri kesintisi (10 sn) ve uzun kesinti (1 saat) eklendi, OEE sözleşmesi ve test senaryoları eklendi, yalnızca `/data` topic'i işlenir. |
 | Hafta 4 | 19 Ekim 2026 | Üretim oturumu eklendi: backend veri gelince açar, 1 saat veri gelmezse kapatır. Planlı süre oturumdan gelir. Veri kesintisi planlı süreden düşülmez, "veri yok" olarak gösterilir. Kısa duruş eşiği yok. ts geriye giderse OEE'deki süre 0. Hatalı, Toplam'dan büyükse İyi 0. OEE mesajı (`event: oee`) ve kart kuralları eklendi. Topic tam 4 parçalı olmalı, test mesajları `…/test`'e atılır. Yeni test senaryoları (6–8). |
+| Hafta 4 düzeltme | 20 Ekim 2026 | Açık oturumda planlı süre son mesaja kadar sayılır. Son mesajdan bu yana 10 sn'den uzun süre geçtiyse şu ana kadar sayılır ve aradaki süre veri yok olur. `no_data_seconds` tam sayı. Zaman alanlarının tam sayı olması vurgulandı. Test 9 eklendi. |
