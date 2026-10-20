@@ -48,12 +48,12 @@ void connectWiFi() {
 }
  
 void syncTime() {
-     // Wokwi simulasyonu gercek zamandan yavas calisabiliyor ve sekme arka
-     // plandayken duraklayabiliyor; ESP32 saati bu yuzden geride kaliyor.
-     // NTP'yi 15 sn'de bir yenileyerek ts'yi gercek saate yakin tutuyoruz.
-    sntp_set_sync_interval(15000);
-       // Ilk sunucu IP ile (time.google.com): DNS calismasa da saat alinabilsin.
-     configTime(0, 0, "216.239.35.0", "pool.ntp.org", "time.google.com");  // UTC
+       // Wokwi simulasyonu gercek zamandan yavas calisabiliyor ve sekme arka
+  // plandayken duraklayabiliyor; ESP32 saati bu yuzden geride kaliyor.
+  // NTP'yi 15 sn'de bir yenileyerek ts'yi gercek saate yakin tutuyoruz.
+  sntp_set_sync_interval(15000);
+  // Ilk sunucu IP ile (time.google.com): DNS calismasa da saat alinabilsin.
+  configTime(0, 0, "216.239.35.0", "pool.ntp.org", "time.google.com");  // UTCs
   Serial.print("[NTP] saat aliniyor");
   time_t now = 0;
   for (int i = 0; i < 40 && now < 1700000000; i++) {  // 2023'ten once = senkron degil

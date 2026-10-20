@@ -26,7 +26,8 @@ Topic: `Factory_1/Production_Line_1/Machine_1/data`
 Kurallar:
 
 - Modbus okuması başarısız olursa o saniye mesaj gönderilmez.
-- MQTT client ID: `python-kopru-machine-1` (ESP32'ninki `esp32-machine-1`).
+- MQTT client ID: `python-kopru-machine-1-<PID>` (ESP32'ninki `esp32-machine-1`). İşlem numarası (PID) sayesinde köprü yanlışlıkla iki kez açılırsa iki kopya aynı ID ile birbirini broker'dan düşürmez; ikincisi açılış kontrolünde birincinin mesajlarını görüp çalışmayı reddeder.
+- **Köprü açıkken bu topic'e elle mesaj atmayın!** Köprü bunu ikinci kaynak sanıp durur. Test mesajları için `Factory_1/Production_Line_1/Machine_1/test` topic'ini kullanın.
 - **Aynı anda tek kaynak:** Köprü açılırken 3 saniye topic'i dinler. Mesaj geliyorsa (ESP32 açıksa) başlamayı reddeder. Çalışırken başka bir kaynak yazmaya başlarsa durur. Aynı topic'e iki kaynak yazarsa artış hesapları bozulur.
 
 ## Kurulum (Windows, bir kez)
@@ -58,7 +59,7 @@ Sonra:
 .venv\Scripts\python kopru.py
 ```
 
-Her saniye bir `[PUB] {...}` satırı görünür. Durdurmak için **Ctrl+C**.
+Her saniye bir `[PUB] {...}` satırı görünür. Durdurmak için **Ctrl+C**; açılış kontrolü sırasında da temiz çıkar (çıkış kodu 0).
 
 Çıkış kodları: `0` Ctrl+C ile durduruldu, `1` MQTT'ye bağlanılamadı, `2` topic'e başka bir kaynak yazıyor.
 
