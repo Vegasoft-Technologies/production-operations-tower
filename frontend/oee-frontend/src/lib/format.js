@@ -21,3 +21,8 @@ export function formatClock(ms, nowMs = Date.now()) {
   if (sameDay) return time;
   return `${d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} ${time}`;
 }
+
+// Veri kesintisi uyarısı: süre okunur biçimde ("1 sa", "2 dk 5 sn")
+export function staleWarning(silentMs) {
+  return `${formatDuration(Math.floor(silentMs / 1000))} boyunca yeni veri gelmedi. ESP32 veya broker durmuş olabilir.`;
+}

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { counterStep, sumWindow } from '../lib/counter';
 import { parseTelemetry } from '../lib/telemetry';
-import { parseOee } from '../lib/oeeMessage';
+import { checkOee } from '../lib/oeeMessage';
 import { startMockSource } from '../lib/mockSource';
 
 const STALE_MS = 10_000; // bu süre veri gelmezse uyarı
 const WINDOW_MS = 60_000; // Gauge: son 60 saniye
 const RETRY_MS = 3_000; // tarayıcı yeniden denemeyi bırakırsa biz bu aralıkla yeniden açarız
 const OEE_STALE_MS = 15_000; // OEE 5 sn'de bir gelir; 3 mesaj kaçarsa değerler eski sayılır
+const INVALID_NOTE_MS = 30_000; // uymayan OEE mesajı notu bu süre ekranda kalır
 
 // SSE (EventSource) ile makine verisini ve OEE'yi dinler.
 // İsimsiz mesajlar: makine verisi (onmessage). "event: oee": oturum OEE değerleri.
@@ -16,6 +17,8 @@ export function useMachineStream(url, mockOptions) {
   const [latest, setLatest] = useState(null);
   const [oee, setOee] = useState(null);
   const [lastOeeArrival, setLastOeeArrival] = useState(null);
+  // Son uymayan OEE mesajı: { at, error, count }
+  const [invalidOee, setInvalidOee] = useState(null);
   const [perMinute, setPerMinute] = useState(0);
   const isMock = !url || url === 'mock';
   // connecting | open | error — sahte kaynak her zaman "açık"
@@ -51,9 +54,10 @@ export function useMachineStream(url, mockOptions) {
     };
 
     const handleOee = (raw) => {
-      const msg = parseOee(raw);
+      const { msg, error } = checkOee(raw);
       if (!msg) {
-        console.warn('Sözleşmeye uymayan OEE mesajı atlandı:', raw);
+        console.warn(`Sözleşmeye uymayan OEE mesajı atlandı (${error}):`, raw);
+        setInvalidOee((prev) => ({ at: Date.now(), error, count: (prev?.count ?? 0) + 1 }));
         return;
       }
       setOee(msg);
@@ -106,5 +110,8 @@ export function useMachineStream(url, mockOptions) {
 
   const oeeStale = lastOeeArrival === null || now - lastOeeArrival > OEE_STALE_MS;
 
-  return { latest, perMinute, connection, stale, silentFor, oee, oeeStale };
+  // Not, son uymayan mesajdan 30 sn sonra kendiliğinden kaybolur
+  const oeeError = invalidOee && now - invalidOee.at <= INVALID_NOTE_MS ? invalidOee : null;
+
+  return { latest, perMinute, connection, stale, silentFor, oee, oeeStale, oeeError };
 }

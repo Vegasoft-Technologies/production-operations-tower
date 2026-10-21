@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOee } from '../src/lib/oeeMessage.js';
+import { parseOee, checkOee, hasGapNote } from '../src/lib/oeeMessage.js';
 
 // Sözleşmedeki örnek mesajın aynısı
 const good = {
@@ -55,4 +55,23 @@ test('bozuk ya da eksik mesaj reddedilir, çökmez', () => {
 
 test('hatalı toplamdan büyük gelebilir (sözleşmeye göre geçerli)', () => {
   assert.ok(send({ ...good, total: 10, reject: 12, quality: 0, oee: 0 }));
+});
+
+// --- İnceleme istekleri ---
+
+test('uymayan mesajda hangi alanın sorunlu olduğu söylenir', () => {
+  assert.equal(checkOee(JSON.stringify({ ...good, availability: 80 })).error, 'availability 0–1 arasında sayı olmalı');
+  assert.equal(checkOee(JSON.stringify({ ...good, ts: 1792153500 })).error, 'ts milisaniye cinsinden zaman olmalı');
+  const { gap_parts: _g, ...missing } = good;
+  assert.equal(checkOee(JSON.stringify(missing)).error, 'gap_parts alanı eksik');
+  assert.equal(checkOee('{bozuk').error, 'JSON okunamadı');
+  assert.equal(checkOee(JSON.stringify(good)).error, null);
+});
+
+test('kesinti notu: no_data_seconds >= 1 ya da gap_parts > 0', () => {
+  assert.equal(hasGapNote({ ...good, no_data_seconds: 0, gap_parts: 0 }), false);
+  assert.equal(hasGapNote({ ...good, no_data_seconds: 0.4, gap_parts: 0 }), false); // "0 sn veri yok" çıkmasın
+  assert.equal(hasGapNote({ ...good, no_data_seconds: 1, gap_parts: 0 }), true);
+  assert.equal(hasGapNote({ ...good, no_data_seconds: 0, gap_parts: 3 }), true);
+  assert.equal(hasGapNote(null), false);
 });

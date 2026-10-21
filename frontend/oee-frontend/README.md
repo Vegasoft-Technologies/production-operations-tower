@@ -62,7 +62,9 @@ Testler `tests/` klasöründe, Node'un kendi test aracıyla çalışır:
 Değerler backend'in aynı `/stream` bağlantısından gönderdiği `event: oee` mesajından gelir
 (5 sn'de bir). Makine mesajları isimsiz gelir (`onmessage`), OEE mesajı
 `addEventListener('oee', …)` ile dinlenir. Mesaj sözleşmeye göre denetlenir
-(`src/lib/oeeMessage.js`): oranlar 0–1, `performance`/`quality` null olabilir; uymayan mesaj atılır.
+(`src/lib/oeeMessage.js`): oranlar 0–1, `performance`/`quality` null olabilir. Uymayan mesaj atılır;
+OEE başlığının altında hangi alanın sorunlu olduğunu söyleyen kısa bir not 30 sn görünür
+(ayrıntı tarayıcı konsolunda).
 
 - Göstergeler 0–1 arası oran alır ve yüzdeye kendileri çevirir. Hesaplanamayan değer "—" görünür.
 - Renkler: %70 altı kırmızı, %70–85 sarı, %85 ve üstü yeşil (`src/lib/gauge.js`).
@@ -70,7 +72,7 @@ Değerler backend'in aynı `/stream` bağlantısından gönderdiği `event: oee`
 - **Toplam üretim** ve **Hatalı üretim** kartları ham sayacı değil, oturumun OEE hesabındaki
   `total` ve `reject` değerini gösterir. Kartların altında oturumun başlangıç saati yazar.
 - Oturumda veri kesintisi olduysa kartın altında not çıkar: veri yok süresi ve kesintide
-  üretilip OEE dışında kalan parça (`no_data_seconds`, `gap_parts`).
+  üretilip OEE dışında kalan parça (`no_data_seconds >= 1` ya da `gap_parts > 0` ise).
 - `session_end` doluysa oturum kapanmıştır: kartlar son oturumu gösterir ve "Oturum kapandı" notu çıkar.
 - 15 sn'dir OEE mesajı gelmezse ya da bağlantı koparsa değerler soluk görünür.
 

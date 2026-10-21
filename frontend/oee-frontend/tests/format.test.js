@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDuration, formatClock } from '../src/lib/format.js';
+import { formatDuration, formatClock, staleWarning } from '../src/lib/format.js';
 import { findGaps, ratioToPct } from '../src/lib/trend.js';
 
 test('süre biçimi', () => {
@@ -30,4 +30,11 @@ test('trend: oran yüzdeye çevrilir, null korunur', () => {
   assert.equal(ratioToPct(0.76), 76);
   assert.equal(ratioToPct(0.8 * 1 * 0.95), 76);
   assert.equal(ratioToPct(null), null);
+});
+
+
+test('veri kesintisi uyarısı süreyi okunur yazar', () => {
+  assert.equal(staleWarning(3_600_000), '1 sa boyunca yeni veri gelmedi. ESP32 veya broker durmuş olabilir.');
+  assert.match(staleWarning(11_400), /^11 sn boyunca/);
+  assert.match(staleWarning(125_000), /^2 dk 5 sn boyunca/);
 });

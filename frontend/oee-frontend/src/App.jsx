@@ -6,7 +6,8 @@ import PlantTree from './components/PlantTree';
 import { PLANT_TREE } from './data/plantTree';
 import { readMockOptions } from './lib/mockSource';
 import { formatPercent } from './lib/gauge';
-import { formatClock, formatDuration } from './lib/format';
+import { formatClock, formatDuration, staleWarning } from './lib/format';
+import { hasGapNote } from './lib/oeeMessage';
 import { RatesTrend, ProductionTrend } from './components/TrendCharts';
 import { TREND_SAMPLE, TREND_STEP_MS } from './data/trendSample';
 import './App.css';
@@ -39,7 +40,7 @@ function App() {
   const [seciliMakine, setSeciliMakine] = useState('Machine_1');
   // Sahte veri seçenekleri (yalnızca VITE_STREAM_URL=mock iken): ?a=…&p=…&q=…, ?oturum=kapali, ?kesinti=1
   const [mockOptions] = useState(() => readMockOptions(window.location.search));
-  const { latest, perMinute, connection, stale, silentFor, oee, oeeStale } = useMachineStream(
+  const { latest, perMinute, connection, stale, silentFor, oee, oeeStale, oeeError } = useMachineStream(
     STREAM_URL,
     mockOptions,
   );
@@ -54,7 +55,7 @@ function App() {
   if (connection === 'error') {
     uyari = 'Backend bağlantısı koptu, yeniden bağlanılıyor…';
   } else if (stale) {
-    uyari = `${Math.floor(silentFor / 1000)} saniyedir yeni veri gelmiyor. ESP32 veya broker durmuş olabilir.`;
+    uyari = staleWarning(silentFor);
   }
 
   // Bağlantı koptuysa ya da 10 sn'dir veri yoksa son değerler artık güncel değil:
@@ -75,7 +76,7 @@ function App() {
   const oeeVeriYok = connection === 'error' || oeeStale;
   const oeeSoluk = oeeVeriYok ? 'soluk' : undefined;
   const oturumKapali = oee?.session_end != null;
-  const kesintiVar = oee && (oee.no_data_seconds > 0 || oee.gap_parts > 0);
+  const kesintiVar = hasGapNote(oee);
 
   return (
     <div className="sayfa">
@@ -160,6 +161,12 @@ function App() {
 
         <section className="bolum" aria-labelledby="oee-baslik">
           <h2 id="oee-baslik">OEE {oturumKapali && <span className="etiket">son oturum</span>}</h2>
+          {oeeError && (
+            <p key={`hata-${oeeError.at}`} className="oee-hata" role="status">
+              Sözleşmeye uymayan OEE mesajı atlandı: {oeeError.error}
+              {oeeError.count > 1 ? ` (toplam ${oeeError.count} kez)` : ''}. Ayrıntı tarayıcı konsolunda.
+            </p>
+          )}
           <div className={oeeSoluk}>
             <div className="oee-grid">
               <OeeGauge title="Availability" value={oee?.availability ?? null} dark={karanlik} />
