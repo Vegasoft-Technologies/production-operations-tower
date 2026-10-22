@@ -35,6 +35,112 @@ static void hexDump(const uint8_t *buf, size_t len) {
   Serial.println();
 }
 
+// ---------------------------------------------------------------------------
+// Dogrulama: cozulen mesaji alan alan orijinal payload'la karsilastir.
+// Not: Tahu'nun print_payload ciktisi ESP32'de alias/timestamp'i yanlis
+// gosteriyor (64-bit sayilari %ld ile yaziyor, ESP32'de long 32-bit). Bu
+// yuzden 64-bit degerleri burada %llu ve (unsigned long long) ile yaziyoruz.
+// ---------------------------------------------------------------------------
+typedef org_eclipse_tahu_protobuf_Payload_Metric Metric;
+
+static int hataSayisi = 0;
+
+static void hata(const char *alan, int i, unsigned long long beklenen,
+                 unsigned long long gelen) {
+  hataSayisi++;
+  if (i >= 0) {
+    Serial.printf("[Dogrulama] HATA: metric[%d].%s farkli (beklenen %llu, gelen %llu)\n",
+                  i, alan, beklenen, gelen);
+  } else {
+    Serial.printf("[Dogrulama] HATA: %s farkli (beklenen %llu, gelen %llu)\n",
+                  alan, beklenen, gelen);
+  }
+}
+
+// Metrik degerini (oneof) metin olarak yazar.
+static void degerYaz(const Metric &m, char *out, size_t n) {
+  switch (m.which_value) {
+    case org_eclipse_tahu_protobuf_Payload_Metric_int_value_tag:
+      snprintf(out, n, "%ld", (long)(int32_t)m.value.int_value);
+      break;
+    case org_eclipse_tahu_protobuf_Payload_Metric_long_value_tag:
+      snprintf(out, n, "%llu", (unsigned long long)m.value.long_value);
+      break;
+    case org_eclipse_tahu_protobuf_Payload_Metric_boolean_value_tag:
+      snprintf(out, n, "%s", m.value.boolean_value ? "true" : "false");
+      break;
+    default:
+      snprintf(out, n, "(tip %u)", (unsigned)m.which_value);
+  }
+}
+
+// Iki metrigin degeri ayni mi? (bu denemede kullanilan tipler)
+static bool degerAyni(const Metric &a, const Metric &b) {
+  if (a.which_value != b.which_value) return false;
+  switch (a.which_value) {
+    case org_eclipse_tahu_protobuf_Payload_Metric_int_value_tag:
+      return a.value.int_value == b.value.int_value;
+    case org_eclipse_tahu_protobuf_Payload_Metric_long_value_tag:
+      return a.value.long_value == b.value.long_value;
+    case org_eclipse_tahu_protobuf_Payload_Metric_boolean_value_tag:
+      return a.value.boolean_value == b.value.boolean_value;
+    default:
+      return false;  // denemede baska tip yok; gelirse hata say
+  }
+}
+
+static void dogrula(const org_eclipse_tahu_protobuf_Payload &orj,
+                    const org_eclipse_tahu_protobuf_Payload &coz) {
+  hataSayisi = 0;
+
+  if (orj.timestamp != coz.timestamp) hata("timestamp", -1, orj.timestamp, coz.timestamp);
+  if (orj.seq != coz.seq) hata("seq", -1, orj.seq, coz.seq);
+  if (orj.metrics_count != coz.metrics_count) {
+    hata("metrik sayisi", -1, orj.metrics_count, coz.metrics_count);
+    Serial.printf("[Dogrulama] HATA: %d alan farkli\n", hataSayisi);
+    return;  // sayilar farkliysa tek tek karsilastirmanin anlami yok
+  }
+
+  Serial.printf("[Dogrulama] cozulen payload: timestamp=%llu seq=%llu, %u metrik\n",
+                (unsigned long long)coz.timestamp, (unsigned long long)coz.seq,
+                (unsigned)coz.metrics_count);
+
+  for (int i = 0; i < (int)coz.metrics_count; i++) {
+    const Metric &a = orj.metrics[i];
+    const Metric &b = coz.metrics[i];
+
+    char deger[24];
+    degerYaz(b, deger, sizeof(deger));
+    Serial.printf("[Dogrulama] metric[%d] name=%s alias=%llu datatype=%u deger=%s\n",
+                  i, b.name ? b.name : "(yok)", (unsigned long long)b.alias,
+                  (unsigned)b.datatype, deger);
+
+    const char *na = a.name ? a.name : "";
+    const char *nb = b.name ? b.name : "";
+    if (strcmp(na, nb) != 0) {
+      hataSayisi++;
+      Serial.printf("[Dogrulama] HATA: metric[%d].name farkli (beklenen %s, gelen %s)\n",
+                    i, na, nb);
+    }
+    if (a.has_alias != b.has_alias || a.alias != b.alias) hata("alias", i, a.alias, b.alias);
+    if (a.timestamp != b.timestamp) hata("timestamp", i, a.timestamp, b.timestamp);
+    if (a.datatype != b.datatype) hata("datatype", i, a.datatype, b.datatype);
+    if (!degerAyni(a, b)) {
+      char beklenen[24];
+      degerYaz(a, beklenen, sizeof(beklenen));
+      hataSayisi++;
+      Serial.printf("[Dogrulama] HATA: metric[%d].deger farkli (beklenen %s, gelen %s)\n",
+                    i, beklenen, deger);
+    }
+  }
+
+  if (hataSayisi == 0) {
+    Serial.println("[Dogrulama] OK");
+  } else {
+    Serial.printf("[Dogrulama] HATA: %d alan farkli\n", hataSayisi);
+  }
+}
+
 void buildAndPrintNbirth() {
   org_eclipse_tahu_protobuf_Payload payload;
 
@@ -80,11 +186,13 @@ void buildAndPrintNbirth() {
         "\"total_count\":1234,\"reject_count\":61}";
     Serial.printf("[Karsilastirma] JSON mesajimiz: %u bayt\n", (unsigned)strlen(json));
 
-    // Kodlanmis mesaji geri cozerek dogrula.
+    // Kodlanmis mesaji geri coz ve her alani orijinaliyle karsilastir.
+    // (decode_payload, Tahu'nun print_payload ciktisini da basar; o ciktidaki
+    // alias/timestamp ESP32'de yanlis gorunur, asil sonuc asagidaki satirlar.)
     org_eclipse_tahu_protobuf_Payload decoded;
     memset(&decoded, 0, sizeof(decoded));
     if (decode_payload(&decoded, buf, (size_t)len) >= 0) {
-      Serial.printf("[Dogrulama] cozuldu: %u metrik\n", (unsigned)decoded.metrics_count);
+      dogrula(payload, decoded);
       free_payload(&decoded);
     } else {
       Serial.println("[Dogrulama] HATA: cozulemedi");

@@ -166,7 +166,16 @@ def main():
 
     log(f"[MQTT] client ID: {CLIENT_ID}")
     kopru = Kopru(args.mqtt_host, args.mqtt_port)
-    if not kopru.bagli.wait(timeout=5):
+    # Baglanti beklenirken de Ctrl+C hemen calissin (5 sn beklemesin).
+    bitis = time.monotonic() + 5
+    while not durdur.is_set() and time.monotonic() < bitis:
+        if kopru.bagli.wait(timeout=0.1):
+            break
+    if durdur.is_set():
+        kopru.kapat()
+        log("Kopru durdu.")
+        sys.exit(0)
+    if not kopru.bagli.is_set():
         log(f"[MQTT] HATA: {args.mqtt_host}:{args.mqtt_port} adresine "
             "baglanilamadi. Mosquitto calisiyor mu?")
         kopru.kapat()
