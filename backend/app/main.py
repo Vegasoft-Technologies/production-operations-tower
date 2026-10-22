@@ -10,15 +10,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
-log = logging.getLogger("oee")
+from app import db
 
-TOPIC = os.environ.get("MQTT_TOPIC", "Factory_1/Production_Line_1/Machine_1/#")
+log = logging.getLogger("oee")
 FIELDS = ("factory", "line", "machine", "ts", "status", "total_count", "reject_count")
 TS_MIN_MS = 1577836800000
 TS_MAX_MS = 4102444800000
 COUNTER_MAX = 32767
 
-subscribers: set[asyncio.Queue[str]] = set()
+subscribers: set[asyncio.Queue[dict[str, str]]] = set()
+
+
+def mqtt_topic() -> str:
+    return os.environ.get("MQTT_TOPIC", "Factory_1/Production_Line_1/Machine_1/data")
 loop: asyncio.AbstractEventLoop | None = None
 
 
@@ -40,7 +44,8 @@ def counter_ok(value: object) -> bool:
 
 
 def data_topic(topic: str) -> bool:
-    return topic.endswith("/data")
+    parts = topic.split("/")
+    return len(parts) == 4 and parts[3] == "data"
 
 
 def checked(msg: object, topic: str) -> dict | None:
@@ -64,19 +69,30 @@ def checked(msg: object, topic: str) -> dict | None:
     return {key: msg[key] for key in FIELDS}
 
 
-def broadcast(data: str) -> None:
+def broadcast(item: dict[str, str]) -> None:
     for queue in list(subscribers):
         try:
-            queue.put_nowait(data)
+            queue.put_nowait(item)
         except Exception:
             log.exception("akışa yazılamadı")
+
+
+def send_oee(payloads: list[dict]) -> None:
+    for payload in payloads:
+        broadcast(
+            {
+                "event": "oee",
+                "data": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            }
+        )
 
 
 def on_connect(client, _userdata, _flags, reason_code, _properties) -> None:
     try:
         if reason_code == 0:
-            client.subscribe(TOPIC)
-            log.info("abone olundu: %s", TOPIC)
+            topic = mqtt_topic()
+            client.subscribe(topic)
+            log.info("abone olundu: %s", topic)
             return
         log.warning("broker bağlantısı reddedildi")
     except Exception:
@@ -109,8 +125,15 @@ def on_message(_client, _userdata, message) -> None:
             return
         if loop is None:
             return
+        payloads: list[dict] = []
+        try:
+            payloads = db.record(clean)
+        except Exception:
+            log.exception("mesaj yazılamadı")
         data = json.dumps(clean, ensure_ascii=False, separators=(",", ":"))
-        loop.call_soon_threadsafe(broadcast, data)
+        loop.call_soon_threadsafe(broadcast, {"data": data})
+        if payloads:
+            asyncio.run_coroutine_threadsafe(publish_saved(payloads), loop)
     except Exception:
         log.exception("mesaj işlenemedi topic=%s payload=%s", topic, raw)
 
@@ -143,13 +166,41 @@ origins = [
 ]
 
 
+async def publish_saved(payloads: list[dict]) -> None:
+    send_oee(payloads)
+
+
+async def publish_current() -> None:
+    try:
+        payload = await asyncio.to_thread(db.snapshot)
+    except Exception:
+        log.exception("oee hesaplanamadı")
+        return
+    if payload is not None:
+        send_oee([payload])
+
+
+async def oee_clock() -> None:
+    while True:
+        await asyncio.sleep(5)
+        await publish_current()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global loop
     logging.basicConfig(level=logging.INFO)
     loop = asyncio.get_running_loop()
+    try:
+        await asyncio.to_thread(db.prepare)
+    except Exception:
+        log.exception("veritabanı hazırlanamadı")
     start_mqtt()
-    yield
+    clock = asyncio.create_task(oee_clock())
+    try:
+        yield
+    finally:
+        clock.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -163,14 +214,13 @@ app.add_middleware(
 
 @app.get("/stream")
 async def stream() -> EventSourceResponse:
-    queue: asyncio.Queue[str] = asyncio.Queue()
+    queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
     subscribers.add(queue)
 
     async def events() -> AsyncIterator[dict[str, str]]:
         try:
             while True:
-                data = await queue.get()
-                yield {"data": data}
+                yield await queue.get()
         finally:
             subscribers.discard(queue)
 

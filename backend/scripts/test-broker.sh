@@ -13,7 +13,7 @@ HOST="${MQTT_HOST:-127.0.0.1}"
 PORT="${MQTT_PORT:-1883}"
 USER="${MQTT_USERNAME:?}"
 PASS="${MQTT_PASSWORD:?}"
-TOPIC="Factory_1/Production_Line_1/Machine_1/data"
+TOPIC="Factory_1/Production_Line_1/Machine_1/test"
 PAYLOAD="Neşe: broker ayakta"
 
 if docker info >/dev/null 2>&1; then

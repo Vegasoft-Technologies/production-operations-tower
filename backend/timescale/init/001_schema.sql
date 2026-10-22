@@ -16,11 +16,25 @@ CREATE TABLE IF NOT EXISTS telemetry (
     -- Süre ts farkı, saniye, yukarı yuvarlanır, en az 1.
     -- Artış, süre + 4'ten büyükse 0 sayılır.
     -- 10 saniyeden uzun ara kesintidir. 1 saati aşan arada üretim bilinmez.
+    -- Bilinmeyen adımın artışı 0 değil NULL yazılır.
     total_count     INTEGER,
     reject_count    INTEGER,
     status          BOOLEAN,
+    total_delta     INTEGER,
+    reject_delta    INTEGER,
     source          TEXT        NOT NULL DEFAULT 'plc'
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id          BIGSERIAL PRIMARY KEY,
+    machine_id  TEXT NOT NULL REFERENCES machines (id),
+    started_at  TIMESTAMPTZ NOT NULL,
+    ended_at    TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_one_open
+    ON sessions (machine_id)
+    WHERE ended_at IS NULL;
 
 SELECT create_hypertable('telemetry', 'time', if_not_exists => TRUE);
 
