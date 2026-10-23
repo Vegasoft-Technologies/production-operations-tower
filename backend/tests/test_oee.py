@@ -1,7 +1,8 @@
 import pytest
 
 from app.main import checked
-from app.oee import counter_step, data_gap, production_total, summarize
+from app.oee import counter_step, data_gap, planned_end, production_total, summarize
+from app.session import expire, receive
 
 TS = 1_760_180_400_000
 
@@ -40,7 +41,7 @@ def interval(on, off, bad_every, count=600):
 
 
 def expect(rows, availability, performance, quality, score):
-    result = summarize(rows)
+    result = summarize(rows, planned_seconds=600)
     assert result["availability"] == pytest.approx(availability, abs=0.001)
     assert result["performance"] == pytest.approx(performance, abs=0.001)
     assert result["quality"] == pytest.approx(quality, abs=0.001)
@@ -124,4 +125,116 @@ def test_alt_baslik_alinmaz():
     msg = message(0, 1, 0, True)
     assert checked(msg, "Factory_1/Production_Line_1/Machine_1/data") == msg
     assert checked(msg, "Factory_1/Production_Line_1/Machine_1/test") is None
-    assert checked(msg, "Factory_1/Production_Line_1/Machine_1/data/ek") is None
+    assert checked(msg, "Factory_1/Production_Line_1/Machine_1/deneme/data") is None
+
+
+def test_hatali_toplamdan_buyuk(caplog):
+    rows = [
+        message(0, 0, 0, True),
+        message(1, 1, 0, True),
+        message(2, 1, 1, True),
+        message(3, 1, 2, True),
+    ]
+    with caplog.at_level("WARNING", logger="oee"):
+        result = summarize(rows, planned_seconds=3)
+    assert result["total"] == 1
+    assert result["reject"] == 2
+    assert result["quality"] == 0
+    assert result["oee"] == 0
+    assert any("hatalı üretim toplamdan büyük" in record.message for record in caplog.records)
+
+
+def test_kesinti_planli_surede_kalir():
+    rows = []
+    ts = TS
+    total = 0
+    rows.append(message(0, total, 0, True))
+    for _ in range(257):
+        ts += 1000
+        total += 1
+        rows.append(
+            {
+                "factory": "Factory_1",
+                "line": "Production_Line_1",
+                "machine": "Machine_1",
+                "ts": ts,
+                "status": True,
+                "total_count": total,
+                "reject_count": 0,
+            }
+        )
+    ts += 86_000
+    total += 86
+    rows.append(
+        {
+            "factory": "Factory_1",
+            "line": "Production_Line_1",
+            "machine": "Machine_1",
+            "ts": ts,
+            "status": True,
+            "total_count": total,
+            "reject_count": 0,
+        }
+    )
+    for _ in range(257):
+        ts += 1000
+        total += 1
+        rows.append(
+            {
+                "factory": "Factory_1",
+                "line": "Production_Line_1",
+                "machine": "Machine_1",
+                "ts": ts,
+                "status": True,
+                "total_count": total,
+                "reject_count": 0,
+            }
+        )
+    assert ts - TS == 600_000
+    result = summarize(rows, planned_seconds=600)
+    assert result["no_data_seconds"] == pytest.approx(86, abs=0.001)
+    assert result["gap_parts"] == 86
+    assert result["availability"] == pytest.approx(0.857, abs=0.001)
+    assert result["performance"] == pytest.approx(1, abs=0.001)
+    assert result["quality"] == pytest.approx(1, abs=0.001)
+    assert result["oee"] == pytest.approx(0.857, abs=0.001)
+
+
+def test_acik_oturum_hesap_zamani():
+    rows = interval(8, 2, 20)
+    start = rows[0]["ts"]
+    last = rows[-1]["ts"]
+
+    def at(delay):
+        end = planned_end(last, last + delay, None)
+        return summarize(rows, (end - start) / 1000)
+
+    early = at(3_000)
+    assert early["no_data_seconds"] == 0
+    assert type(early["no_data_seconds"]) is int
+    assert early["oee"] == pytest.approx(0.76, abs=0.001)
+    late = at(15_000)
+    assert late["no_data_seconds"] == 15
+    assert late["availability"] == pytest.approx(0.780, abs=0.001)
+    assert late["oee"] == pytest.approx(0.741, abs=0.001)
+
+
+def test_oturum_acilir_ve_kapanir():
+    start = 1_700_000_000_000
+    session, closed, opened = receive(None, start)
+    assert opened
+    assert closed is None
+    assert session["start"] == start
+    assert session["end"] is None
+    session, closed, opened = receive(session, start + 1000)
+    assert not opened
+    assert closed is None
+    assert session["last"] == start + 1000
+    empty, closed = expire(session, start + 1000 + 3_600_000 + 1)
+    assert empty is None
+    assert closed["end"] == start + 1000
+    nxt = start + 1000 + 3_600_000 + 5000
+    session, closed, opened = receive(None, nxt)
+    assert opened
+    assert session["start"] == nxt
+    assert session["end"] is None

@@ -1,6 +1,9 @@
 """OEE hesabı. Kurallar docs/veri-sozlesmesi.md dosyasında."""
 
+import logging
 import math
+
+log = logging.getLogger("oee")
 
 COUNTER_MAX = 32767
 IDEAL_CYCLE_SECONDS = 1
@@ -47,6 +50,14 @@ def production_total(messages: list[dict]) -> int:
     return total
 
 
+def planned_end(last_ms: int, now_ms: int, session_end: int | None) -> int:
+    if session_end is not None:
+        return session_end
+    if now_ms - last_ms > 10_000:
+        return now_ms
+    return last_ms
+
+
 def _duration(ts_old: int, ts_new: int) -> float:
     delta = (ts_new - ts_old) / 1000
     if delta < 0:
@@ -54,11 +65,13 @@ def _duration(ts_old: int, ts_new: int) -> float:
     return delta
 
 
-def summarize(messages: list[dict]) -> dict:
-    planned = 0.0
+def summarize(messages: list[dict], planned_seconds: float | None = None) -> dict:
     running = 0.0
+    normal = 0.0
+    gaps = 0.0
     total = 0
     reject = 0
+    gap_parts = 0
     for left, right in zip(messages, messages[1:]):
         counted = counter_step(
             left["total_count"],
@@ -66,7 +79,12 @@ def summarize(messages: list[dict]) -> dict:
             left["ts"],
             right["ts"],
         )
-        if counted is None or data_gap(left["ts"], right["ts"]):
+        if counted is None:
+            continue
+        duration = _duration(left["ts"], right["ts"])
+        if data_gap(left["ts"], right["ts"]):
+            gap_parts += counted
+            gaps += duration
             continue
         bad = counter_step(
             left["reject_count"],
@@ -74,14 +92,17 @@ def summarize(messages: list[dict]) -> dict:
             left["ts"],
             right["ts"],
         )
-        duration = _duration(left["ts"], right["ts"])
-        planned += duration
+        normal += duration
         if left["status"]:
             running += duration
         total += counted
         if bad:
             reject += bad
 
+    planned = normal + gaps if planned_seconds is None else planned_seconds
+    no_data = int(round(planned - normal))
+    if no_data < 0:
+        no_data = 0
     availability = 0.0
     performance = None
     quality = None
@@ -96,7 +117,15 @@ def summarize(messages: list[dict]) -> dict:
             performance = (IDEAL_CYCLE_SECONDS * total) / running
             if performance > 1:
                 performance = 1.0
-            quality = (total - reject) / total
+            if reject > total:
+                log.warning(
+                    "hatalı üretim toplamdan büyük total=%s reject=%s",
+                    total,
+                    reject,
+                )
+                quality = 0.0
+            else:
+                quality = (total - reject) / total
             score = availability * performance * quality
     return {
         "availability": availability,
@@ -105,20 +134,22 @@ def summarize(messages: list[dict]) -> dict:
         "oee": score,
         "total": total,
         "reject": reject,
+        "no_data_seconds": no_data,
+        "gap_parts": gap_parts,
     }
 
 
-def availability(messages: list[dict]) -> float:
-    return summarize(messages)["availability"]
+def availability(messages: list[dict], planned_seconds: float | None = None) -> float:
+    return summarize(messages, planned_seconds)["availability"]
 
 
-def performance(messages: list[dict]) -> float | None:
-    return summarize(messages)["performance"]
+def performance(messages: list[dict], planned_seconds: float | None = None) -> float | None:
+    return summarize(messages, planned_seconds)["performance"]
 
 
-def quality(messages: list[dict]) -> float | None:
-    return summarize(messages)["quality"]
+def quality(messages: list[dict], planned_seconds: float | None = None) -> float | None:
+    return summarize(messages, planned_seconds)["quality"]
 
 
-def oee(messages: list[dict]) -> float:
-    return summarize(messages)["oee"]
+def oee(messages: list[dict], planned_seconds: float | None = None) -> float:
+    return summarize(messages, planned_seconds)["oee"]
