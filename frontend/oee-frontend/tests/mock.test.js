@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMockState, mockStep } from '../src/lib/mockSource.js';
+import { createMockState, mockStep, mockOeeMessage, readMockOptions } from '../src/lib/mockSource.js';
 import { counterStep } from '../src/lib/counter.js';
+import { parseOee } from '../src/lib/oeeMessage.js';
 
 // 600 saniye çalıştırıp sahte verinin PLC gibi davrandığını doğrula
 function run(seconds) {
@@ -44,4 +45,34 @@ test('başa dönüşte 32767 hiç görünmez, 32766\'dan sonra 0 gelir', () => {
     seen.push(state.total);
   }
   assert.deepEqual(seen, [32766, 0, 1, 2]);
+});
+
+// --- Sahte OEE mesajı ---
+
+const START = 1792150000000;
+const NOW = START + 10 * 60 * 1000;
+
+test('sahte OEE mesajı sözleşmeye uyar ve sabit örnek değerleri taşır', () => {
+  const m = mockOeeMessage(readMockOptions(''), START, NOW);
+  assert.deepEqual(parseOee(JSON.stringify(m)), m);
+  assert.equal(m.availability, 0.8);
+  assert.equal(m.performance, 1);
+  assert.equal(m.quality, 0.95);
+  assert.equal(Math.round(m.oee * 1000) / 1000, 0.76);
+  assert.equal(m.session_end, null);
+});
+
+test('kartlar Quality ile uyuşur: (Toplam − Hatalı) ÷ Toplam = Quality', () => {
+  for (const q of ['0.95', '0.75', '0.5']) {
+    const m = mockOeeMessage(readMockOptions(`?q=${q}`), START, NOW);
+    assert.equal((m.total - m.reject) / m.total, Number(q));
+  }
+});
+
+test('?oturum=kapali ve ?kesinti=1 seçenekleri', () => {
+  const m = mockOeeMessage(readMockOptions('?oturum=kapali&kesinti=1'), START, NOW);
+  assert.ok(m.session_end > START);
+  assert.equal(m.no_data_seconds, 86);
+  assert.equal(m.gap_parts, 69);
+  assert.ok(parseOee(JSON.stringify(m)));
 });

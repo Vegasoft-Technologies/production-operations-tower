@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { counterStep, sumWindow } from '../lib/counter';
 import { parseTelemetry } from '../lib/telemetry';
+import { checkOee } from '../lib/oeeMessage';
 import { startMockSource } from '../lib/mockSource';
 
 const STALE_MS = 10_000; // bu süre veri gelmezse uyarı
 const WINDOW_MS = 60_000; // Gauge: son 60 saniye
 const RETRY_MS = 3_000; // tarayıcı yeniden denemeyi bırakırsa biz bu aralıkla yeniden açarız
+const OEE_STALE_MS = 15_000; // OEE 5 sn'de bir gelir; 3 mesaj kaçarsa değerler eski sayılır
+const INVALID_NOTE_MS = 30_000; // uymayan OEE mesajı notu bu süre ekranda kalır
 
-// SSE (EventSource) ile makine verisini dinler.
-// url boşsa ya da 'mock' ise sahte kaynak kullanılır.
-export function useMachineStream(url) {
+// SSE (EventSource) ile makine verisini ve OEE'yi dinler.
+// İsimsiz mesajlar: makine verisi (onmessage). "event: oee": oturum OEE değerleri.
+// url boşsa ya da 'mock' ise sahte kaynak kullanılır (mockOptions ile).
+export function useMachineStream(url, mockOptions) {
   const [latest, setLatest] = useState(null);
+  const [oee, setOee] = useState(null);
+  const [lastOeeArrival, setLastOeeArrival] = useState(null);
+  // Son uymayan OEE mesajı: { at, error, count }
+  const [invalidOee, setInvalidOee] = useState(null);
   const [perMinute, setPerMinute] = useState(0);
   const isMock = !url || url === 'mock';
   // connecting | open | error — sahte kaynak her zaman "açık"
@@ -45,8 +53,19 @@ export function useMachineStream(url) {
       setLastArrival(Date.now());
     };
 
+    const handleOee = (raw) => {
+      const { msg, error } = checkOee(raw);
+      if (!msg) {
+        console.warn(`Sözleşmeye uymayan OEE mesajı atlandı (${error}):`, raw);
+        setInvalidOee((prev) => ({ at: Date.now(), error, count: (prev?.count ?? 0) + 1 }));
+        return;
+      }
+      setOee(msg);
+      setLastOeeArrival(Date.now());
+    };
+
     if (isMock) {
-      return startMockSource(handle);
+      return startMockSource(handle, handleOee, mockOptions);
     }
 
     let es = null;
@@ -56,7 +75,8 @@ export function useMachineStream(url) {
     const connect = () => {
       es = new EventSource(url);
       es.onopen = () => setConnection('open');
-      es.onmessage = (event) => handle(event.data);
+      es.onmessage = (event) => handle(event.data); // isimsiz olay: makine verisi
+      es.addEventListener('oee', (event) => handleOee(event.data));
       es.onerror = () => {
         setConnection('error');
         // Ağ kesintisinde tarayıcı kendisi yeniden dener (readyState = CONNECTING).
@@ -77,7 +97,7 @@ export function useMachineStream(url) {
       clearTimeout(retryTimer);
       es?.close();
     };
-  }, [url, isMock]);
+  }, [url, isMock, mockOptions]);
 
   // Her saniye saati güncelle → "10 sn'dir veri yok" kontrolü
   useEffect(() => {
@@ -88,5 +108,10 @@ export function useMachineStream(url) {
   const silentFor = now - (lastArrival ?? startedAt);
   const stale = silentFor > STALE_MS;
 
-  return { latest, perMinute, connection, stale, silentFor };
+  const oeeStale = lastOeeArrival === null || now - lastOeeArrival > OEE_STALE_MS;
+
+  // Not, son uymayan mesajdan 30 sn sonra kendiliğinden kaybolur
+  const oeeError = invalidOee && now - invalidOee.at <= INVALID_NOTE_MS ? invalidOee : null;
+
+  return { latest, perMinute, connection, stale, silentFor, oee, oeeStale, oeeError };
 }

@@ -275,3 +275,85 @@
 .tema-butonu:hover {
   border-color: var(--text);
 }
+
+/* Oturum bilgisi (kartların altında) */
+.oturum {
+  margin-top: 10px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.oturum p {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.oturum-kapandi {
+  color: var(--text-h);
+  border-color: var(--text);
+}
+
+.kesinti-notu {
+  color: var(--uyari-text);
+  background: var(--uyari-bg);
+  border: 1px solid var(--uyari-border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* Trend grafikleri */
+.grafik-baslik {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-h);
+  text-align: left;
+  margin: 16px 0 4px;
+}
+
+.tablo-gorunumu {
+  margin-top: 12px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.tablo-gorunumu summary {
+  cursor: pointer;
+  color: var(--text-h);
+}
+
+.tablo-gorunumu table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tablo-gorunumu th,
+.tablo-gorunumu td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.tablo-gorunumu th:first-child,
+.tablo-gorunumu td:first-child {
+  text-align: left;
+}
+
+/* Uymayan OEE mesajı notu */
+.oee-hata {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid var(--stop);
+  color: var(--text-h);
+}

@@ -4,8 +4,12 @@ import RateGauge from './components/RateGauge';
 import OeeGauge from './components/OeeGauge';
 import PlantTree from './components/PlantTree';
 import { PLANT_TREE } from './data/plantTree';
-import { readSampleOee } from './lib/oeeSample';
+import { readMockOptions } from './lib/mockSource';
 import { formatPercent } from './lib/gauge';
+import { formatClock, formatDuration, staleWarning } from './lib/format';
+import { hasGapNote } from './lib/oeeMessage';
+import { RatesTrend, ProductionTrend } from './components/TrendCharts';
+import { TREND_SAMPLE, TREND_STEP_MS } from './data/trendSample';
 import './App.css';
 
 const STREAM_URL = import.meta.env.VITE_STREAM_URL || 'mock';
@@ -34,9 +38,12 @@ function App() {
   // Sayfa her zaman açık temayla başlar
   const [karanlik, setKaranlik] = useState(false);
   const [seciliMakine, setSeciliMakine] = useState('Machine_1');
-  // Bu hafta örnek OEE değerleri; Hafta 4'te backend'den gelecek
-  const [oee] = useState(() => readSampleOee(window.location.search));
-  const { latest, perMinute, connection, stale, silentFor } = useMachineStream(STREAM_URL);
+  // Sahte veri seçenekleri (yalnızca VITE_STREAM_URL=mock iken): ?a=…&p=…&q=…, ?oturum=kapali, ?kesinti=1
+  const [mockOptions] = useState(() => readMockOptions(window.location.search));
+  const { latest, perMinute, connection, stale, silentFor, oee, oeeStale, oeeError } = useMachineStream(
+    STREAM_URL,
+    mockOptions,
+  );
 
   // Tema değişince <html> etiketine data-theme yaz, CSS renkleri buna göre değişir
   useEffect(() => {
@@ -48,7 +55,7 @@ function App() {
   if (connection === 'error') {
     uyari = 'Backend bağlantısı koptu, yeniden bağlanılıyor…';
   } else if (stale) {
-    uyari = `${Math.floor(silentFor / 1000)} saniyedir yeni veri gelmiyor. ESP32 veya broker durmuş olabilir.`;
+    uyari = staleWarning(silentFor);
   }
 
   // Bağlantı koptuysa ya da 10 sn'dir veri yoksa son değerler artık güncel değil:
@@ -64,7 +71,12 @@ function App() {
     durumSinifi = calisiyor ? 'durum-calisiyor' : 'durum-durusta';
   }
 
-  const oeeToplam = oee.availability * oee.performance * oee.quality;
+  // OEE değerleri backend'in "event: oee" mesajından. Bağlantı koptuysa ya da
+  // 15 sn'dir OEE mesajı gelmediyse değerler soluk gösterilir.
+  const oeeVeriYok = connection === 'error' || oeeStale;
+  const oeeSoluk = oeeVeriYok ? 'soluk' : undefined;
+  const oturumKapali = oee?.session_end != null;
+  const kesintiVar = hasGapNote(oee);
 
   return (
     <div className="sayfa">
@@ -111,38 +123,101 @@ function App() {
             </div>
 
             <dl className="bilgiler">
-              <div className={soluk}>
+              {/* Oturumun OEE hesabındaki Toplam ve Hatalı (ham sayaç değil) */}
+              <div className={oeeSoluk}>
                 <dt>Toplam üretim</dt>
-                <dd>{latest ? latest.total_count.toLocaleString('tr-TR') : '—'}</dd>
+                <dd>{oee ? oee.total.toLocaleString('tr-TR') : '—'}</dd>
               </div>
-              <div className={soluk}>
+              <div className={oeeSoluk}>
                 <dt>Hatalı üretim</dt>
-                <dd>{latest ? latest.reject_count.toLocaleString('tr-TR') : '—'}</dd>
+                <dd>{oee ? oee.reject.toLocaleString('tr-TR') : '—'}</dd>
               </div>
               <div>
                 <dt>Makine durumu</dt>
                 <dd className={durumSinifi}>{durumMetni}</dd>
               </div>
             </dl>
+
+            {oee && (
+              <div className="oturum">
+                <p>
+                  <span key={`bas-${oee.session_start}`}>Oturum başlangıcı: {formatClock(oee.session_start)}</span>
+                  {oturumKapali && (
+                    <span key="kapandi" className="etiket oturum-kapandi">
+                      Oturum kapandı · {formatClock(oee.session_end)}
+                    </span>
+                  )}
+                </p>
+                {kesintiVar && (
+                  <p key="kesinti" className="kesinti-notu">
+                    Veri kesintisi: {formatDuration(oee.no_data_seconds)} veri yok · kesintide üretilen{' '}
+                    {oee.gap_parts.toLocaleString('tr-TR')} parça OEE dışında
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
         <section className="bolum" aria-labelledby="oee-baslik">
-          <h2 id="oee-baslik">
-            OEE <span className="etiket">örnek değerler</span>
-          </h2>
-          <div className="oee-grid">
-            <OeeGauge title="Availability" value={oee.availability} dark={karanlik} />
-            <OeeGauge title="Performance" value={oee.performance} dark={karanlik} />
-            <OeeGauge title="Quality" value={oee.quality} dark={karanlik} />
+          <h2 id="oee-baslik">OEE {oturumKapali && <span className="etiket">son oturum</span>}</h2>
+          {oeeError && (
+            <p key={`hata-${oeeError.at}`} className="oee-hata" role="status">
+              Sözleşmeye uymayan OEE mesajı atlandı: {oeeError.error}
+              {oeeError.count > 1 ? ` (toplam ${oeeError.count} kez)` : ''}. Ayrıntı tarayıcı konsolunda.
+            </p>
+          )}
+          <div className={oeeSoluk}>
+            <div className="oee-grid">
+              <OeeGauge title="Availability" value={oee?.availability ?? null} dark={karanlik} />
+              <OeeGauge title="Performance" value={oee?.performance ?? null} dark={karanlik} />
+              <OeeGauge title="Quality" value={oee?.quality ?? null} dark={karanlik} />
+            </div>
+            <p className="oee-toplam">
+              OEE = A × P × Q = <strong key={`oee-${oee?.oee}`}>{formatPercent(oee?.oee ?? null)}</strong>
+            </p>
           </div>
-          <p className="oee-toplam">
-            OEE = A × P × Q = <strong>{formatPercent(oeeToplam)}</strong>
-          </p>
           <p className="renk-aciklama">
             <span className="nokta kirmizi" /> %70 altı <span className="nokta sari" /> %70–85{' '}
             <span className="nokta yesil" /> %85 ve üstü
           </p>
+        </section>
+
+        <section className="bolum" aria-labelledby="trend-baslik">
+          <h2 id="trend-baslik">
+            Trend <span className="etiket">örnek veri</span>
+          </h2>
+          <h3 className="grafik-baslik">OEE, Availability, Performance ve Quality (5 dk aralıklarla)</h3>
+          <RatesTrend rows={TREND_SAMPLE} dark={karanlik} />
+          <h3 className="grafik-baslik">Üretim adedi (parça / 5 dk)</h3>
+          <ProductionTrend rows={TREND_SAMPLE} dark={karanlik} stepMinutes={TREND_STEP_MS / 60000} />
+          <details className="tablo-gorunumu">
+            <summary>Tablo olarak göster</summary>
+            <table>
+              <thead>
+                <tr>
+                  <th>Saat</th>
+                  <th>OEE</th>
+                  <th>A</th>
+                  <th>P</th>
+                  <th>Q</th>
+                  <th>Parça</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TREND_SAMPLE.map((r) => (
+                  <tr key={r.ts}>
+                    <td>{formatClock(r.ts, r.ts)}</td>
+                    <td>{formatPercent(r.oee)}</td>
+                    <td>{formatPercent(r.availability)}</td>
+                    <td>{formatPercent(r.performance)}</td>
+                    <td>{formatPercent(r.quality)}</td>
+                    <td>{r.parts === null ? 'veri yok' : r.parts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </section>
       </main>
     </div>
