@@ -33,6 +33,7 @@ Kurallar:
 
 - Modbus okuması başarısız olursa o saniye mesaj gönderilmez; eski değer tekrar gönderilmez.
 - NTP saati alınamadıysa da mesaj gönderilmez.
+- İlk NTP sunucusu IP ile verilir (`216.239.35.0`, time.google.com). Wokwi'de `pool.ntp.org` adı bazen çözülemiyor ve ESP32 saat alamıyordu; IP ile DNS'e gerek kalmadan saat alınır.
 - ESP32 saati 15 saniyede bir NTP'den yenilenir. Wokwi simülasyonu gerçek zamandan yavaş çalışabildiği ve sekme arka plandayken duraklayabildiği için, yalnızca açılışta alınan saat dakikalar içinde geride kalıyordu.
 - Sayaçlar 32767'den sonra 0'a döner, PLC yeniden başlayınca 0'dan başlar. Artış hesabı backend'in işidir (bkz. veri sözleşmesi).
 

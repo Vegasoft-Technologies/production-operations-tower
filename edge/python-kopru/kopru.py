@@ -28,6 +28,7 @@ import argparse
 import collections
 import json
 import logging
+import os
 import signal
 import sys
 import threading
@@ -41,7 +42,10 @@ FACTORY = "Factory_1"
 LINE = "Production_Line_1"
 MACHINE = "Machine_1"
 TOPIC = f"{FACTORY}/{LINE}/{MACHINE}/data"
-CLIENT_ID = "python-kopru-machine-1"  # ESP32'ninki: esp32-machine-1
+# Islem numarasi (PID) eklenir: kopru yanlislikla iki kez acilirsa iki kopya
+# ayni ID ile birbirini broker'dan dusurmez; ikincisi acilis kontrolunde
+# birincinin mesajlarini gorup baslamayi reddeder. ESP32'ninki: esp32-machine-1
+CLIENT_ID = f"python-kopru-machine-1-{os.getpid()}"
 PERIYOT_SN = 1.0
 
 
@@ -156,8 +160,22 @@ def main():
     # pymodbus her basarisiz denemede uzun hata basiyor; bizim satirimiz yeterli.
     logging.getLogger("pymodbus").setLevel(logging.CRITICAL)
 
+    # Ctrl+C her asamada (acilis kontrolu dahil) temiz cikis yapsin: cikis kodu 0.
+    durdur = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: durdur.set())
+
+    log(f"[MQTT] client ID: {CLIENT_ID}")
     kopru = Kopru(args.mqtt_host, args.mqtt_port)
-    if not kopru.bagli.wait(timeout=5):
+    # Baglanti beklenirken de Ctrl+C hemen calissin (5 sn beklemesin).
+    bitis = time.monotonic() + 5
+    while not durdur.is_set() and time.monotonic() < bitis:
+        if kopru.bagli.wait(timeout=0.1):
+            break
+    if durdur.is_set():
+        kopru.kapat()
+        log("Kopru durdu.")
+        sys.exit(0)
+    if not kopru.bagli.is_set():
         log(f"[MQTT] HATA: {args.mqtt_host}:{args.mqtt_port} adresine "
             "baglanilamadi. Mosquitto calisiyor mu?")
         kopru.kapat()
@@ -165,16 +183,23 @@ def main():
 
     # 1) Baska bir kaynak (ESP32) yayin yapiyor mu?
     log(f"[Kontrol] {args.dinle:.0f} sn boyunca {TOPIC} dinleniyor...")
-    if kopru.yabanci.wait(timeout=args.dinle):
+    bitis = time.monotonic() + args.dinle
+    while not durdur.is_set() and time.monotonic() < bitis:
+        if kopru.yabanci.wait(timeout=0.1):
+            break
+    if durdur.is_set():
+        kopru.kapat()
+        log("Kopru durdu.")
+        sys.exit(0)
+    if kopru.yabanci.is_set():
         log("[Kontrol] HATA: Bu topic'e su an baska bir kaynak yaziyor "
-            "(ESP32 acik olabilir). Once onu kapat, sonra kopruyu baslat.")
+            "(ESP32 ya da baska bir kopru acik olabilir). Once onu kapat, "
+            "sonra kopruyu baslat.")
         kopru.kapat()
         sys.exit(2)
     log("[Kontrol] OK, topic bos. Yayin basliyor.")
 
     plc = ModbusTcpClient(args.plc_host, port=args.plc_port, timeout=0.5)
-    durdur = threading.Event()
-    signal.signal(signal.SIGINT, lambda *_: durdur.set())
 
     sonraki = time.monotonic()
     cikis = 0
