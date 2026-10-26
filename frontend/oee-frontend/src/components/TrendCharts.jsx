@@ -1,4 +1,6 @@
+import { memo, useMemo, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 import { findGaps, ratioToPct } from '../lib/trend';
 import { formatPercent } from '../lib/gauge';
 
@@ -24,6 +26,8 @@ function theme(dark) {
     grid: dark ? '#2e303a' : '#e5e4e7',
     gapFill: dark ? 'rgba(156,163,175,0.12)' : 'rgba(107,99,117,0.08)',
     tooltipBg: dark ? '#1f2028' : '#ffffff',
+    zoomFill: dark ? 'rgba(57,135,229,0.18)' : 'rgba(42,120,214,0.12)',
+    handle: dark ? '#9ca3af' : '#6b6375',
   };
 }
 
@@ -40,6 +44,50 @@ function gapArea(rows, key, t) {
     label: { show: true, position: 'insideTop', color: t.muted, fontSize: 11, formatter: 'veri yok' },
     data: gaps.map(([from, to]) => [{ xAxis: from }, { xAxis: to }]),
   };
+}
+
+// İki grafik aynı grupta: birinde yakınlaştırma/kaydırma diğerine de uygulanır
+const TREND_GROUP = 'oee-trend';
+const MIN_SPAN_MS = 15 * 60 * 1000; // en fazla 15 dakikaya kadar yakınlaşılır
+
+// Bağlı grafiklerde dataZoom bileşenleri aynı sırada olmalı: 0 = içeride, 1 = kaydırma çubuğu.
+// Çubuk yalnızca alttaki grafikte görünür.
+function dataZoom(t, showSlider) {
+  return [
+    {
+      type: 'inside',
+      xAxisIndex: 0,
+      filterMode: 'none', // kenardaki çizgi parçaları kesilmesin
+      minValueSpan: MIN_SPAN_MS,
+      zoomOnMouseWheel: 'ctrl', // sayfa kaydırması bozulmasın: yakınlaştırma Ctrl + tekerlek
+      moveOnMouseWheel: false,
+      moveOnMouseMove: true, // sürükleyerek kaydır
+    },
+    {
+      type: 'slider',
+      show: showSlider,
+      xAxisIndex: 0,
+      filterMode: 'none',
+      minValueSpan: MIN_SPAN_MS,
+      height: 22,
+      bottom: 6,
+      left: 56, // tutamaç etiketleri ("09:46") kenardan taşmasın
+      right: 56,
+      borderColor: t.grid,
+      fillerColor: t.zoomFill,
+      handleStyle: { color: t.handle, borderColor: t.handle },
+      moveHandleStyle: { color: t.handle },
+      dataBackground: { lineStyle: { color: t.muted, opacity: 0.4 }, areaStyle: { color: t.muted, opacity: 0.1 } },
+      textStyle: { color: t.muted, fontSize: 11 },
+      labelFormatter: (v) => timeLabel(v),
+      brushSelect: false,
+    },
+  ];
+}
+
+function joinGroup(chart) {
+  chart.group = TREND_GROUP;
+  echarts.connect(TREND_GROUP);
 }
 
 function baseAxes(t) {
@@ -61,12 +109,14 @@ function baseAxes(t) {
   };
 }
 
-export function RatesTrend({ rows, dark = false }) {
+// Ekran her saniye yenilenir (canlı veri). Ayarlar yalnızca veri ya da tema değişince
+// yeniden hesaplanır; yoksa ECharts'a her saniye yeni ayar gider ve yakınlaştırma sıfırlanır.
+function ratesOption(rows, dark) {
   const t = theme(dark);
   const colors = SERIES_COLORS[dark ? 'dark' : 'light'];
   const { xAxis, tooltipBase } = baseAxes(t);
 
-  const option = {
+  return {
     animation: false,
     grid: { left: 48, right: 24, top: 44, bottom: 28 },
     legend: {
@@ -90,6 +140,7 @@ export function RatesTrend({ rows, dark = false }) {
       },
     },
     xAxis,
+    dataZoom: dataZoom(t, false),
     yAxis: {
       type: 'value',
       min: 0,
@@ -124,17 +175,23 @@ export function RatesTrend({ rows, dark = false }) {
     })),
   };
 
-  return <ReactECharts option={option} notMerge style={{ height: 300, width: '100%' }} />;
 }
 
-export function ProductionTrend({ rows, dark = false, stepMinutes = 5 }) {
+function RatesTrend({ rows, dark = false, chartRef }) {
+  const option = useMemo(() => ratesOption(rows, dark), [rows, dark]);
+  return (
+    <ReactECharts ref={chartRef} option={option} notMerge onChartReady={joinGroup} style={{ height: 300, width: '100%' }} />
+  );
+}
+
+function productionOption(rows, dark, stepMinutes) {
   const t = theme(dark);
   const color = SERIES_COLORS[dark ? 'dark' : 'light'].oee;
   const { xAxis, tooltipBase } = baseAxes(t);
 
-  const option = {
+  return {
     animation: false,
-    grid: { left: 48, right: 24, top: 16, bottom: 28 },
+    grid: { left: 48, right: 24, top: 16, bottom: 64 }, // altta kaydırma çubuğuna yer
     tooltip: {
       ...tooltipBase,
       formatter: (items) => {
@@ -145,6 +202,7 @@ export function ProductionTrend({ rows, dark = false, stepMinutes = 5 }) {
       },
     },
     xAxis,
+    dataZoom: dataZoom(t, true),
     yAxis: {
       type: 'value',
       min: 0,
@@ -167,5 +225,42 @@ export function ProductionTrend({ rows, dark = false, stepMinutes = 5 }) {
     ],
   };
 
-  return <ReactECharts option={option} notMerge style={{ height: 220, width: '100%' }} />;
 }
+
+function ProductionTrend({ rows, dark = false, stepMinutes = 5, chartRef }) {
+  const option = useMemo(() => productionOption(rows, dark, stepMinutes), [rows, dark, stepMinutes]);
+  return (
+    <ReactECharts ref={chartRef} option={option} notMerge onChartReady={joinGroup} style={{ height: 260, width: '100%' }} />
+  );
+}
+
+// İki grafik + yakınlaştırma ipucu ve sıfırlama butonu.
+// memo: üst bileşen her saniye yenilense de props değişmedikçe panel yeniden çizilmez.
+export const TrendPanel = memo(function TrendPanel({ rows, dark = false, stepMinutes = 5 }) {
+  const ratesRef = useRef(null);
+  const partsRef = useRef(null);
+
+  const reset = () => {
+    // Grafikler bağlı olduğu için birine göndermek yeter; yine de ikisine de gönderiyoruz
+    for (const ref of [ratesRef, partsRef]) {
+      ref.current?.getEchartsInstance().dispatchAction({ type: 'dataZoom', start: 0, end: 100 });
+    }
+  };
+
+  return (
+    <div className="trend">
+      <div className="trend-ust">
+        <p className="trend-ipucu">
+          Sürükleyerek kaydır · Ctrl + tekerlek ile yakınlaştır · alttaki çubukla aralık seç
+        </p>
+        <button type="button" className="kucuk-buton" onClick={reset}>
+          Tümünü göster
+        </button>
+      </div>
+      <h3 className="grafik-baslik">OEE, Availability, Performance ve Quality ({stepMinutes} dk aralıklarla)</h3>
+      <RatesTrend rows={rows} dark={dark} chartRef={ratesRef} />
+      <h3 className="grafik-baslik">Üretim adedi (parça / {stepMinutes} dk)</h3>
+      <ProductionTrend rows={rows} dark={dark} stepMinutes={stepMinutes} chartRef={partsRef} />
+    </div>
+  );
+});

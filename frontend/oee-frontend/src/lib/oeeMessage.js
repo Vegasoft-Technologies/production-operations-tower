@@ -1,4 +1,5 @@
 import { isMillisecondTimestamp } from './telemetry.js';
+import { formatDuration } from './format.js';
 
 // Backend'in "event: oee" mesajını sözleşmeye göre denetler.
 // Uymayan mesajda ekran o mesajı yok sayar, çökmez; ilk uymayan alan ekranda not olarak görünür.
@@ -64,4 +65,16 @@ export function parseOee(raw) {
 // en az 1 sn veri yok ya da kesintide üretilip OEE dışında kalan parça var.
 export function hasGapNote(oee) {
   return Boolean(oee) && (oee.no_data_seconds >= 1 || oee.gap_parts > 0);
+}
+
+// Kesinti notunun metni; not gerekmiyorsa null.
+// Parça 0 ise "kesintide üretilen 0 parça" kısmı yazılmaz (kesinti sürerken hep 0'dır).
+export function gapNoteText(oee) {
+  if (!hasGapNote(oee)) return null;
+  const parts = [];
+  if (oee.no_data_seconds >= 1) parts.push(`${formatDuration(oee.no_data_seconds)} veri yok`);
+  if (oee.gap_parts > 0) {
+    parts.push(`kesintide üretilen ${oee.gap_parts.toLocaleString('tr-TR')} parça OEE dışında`);
+  }
+  return `Veri kesintisi: ${parts.join(' · ')}`;
 }

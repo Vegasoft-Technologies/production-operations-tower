@@ -6,9 +6,9 @@ import PlantTree from './components/PlantTree';
 import { PLANT_TREE } from './data/plantTree';
 import { readMockOptions } from './lib/mockSource';
 import { formatPercent } from './lib/gauge';
-import { formatClock, formatDuration, staleWarning } from './lib/format';
-import { hasGapNote } from './lib/oeeMessage';
-import { RatesTrend, ProductionTrend } from './components/TrendCharts';
+import { formatClock, staleWarning } from './lib/format';
+import { gapNoteText } from './lib/oeeMessage';
+import { TrendPanel } from './components/TrendCharts';
 import { TREND_SAMPLE, TREND_STEP_MS } from './data/trendSample';
 import './App.css';
 
@@ -76,7 +76,7 @@ function App() {
   const oeeVeriYok = connection === 'error' || oeeStale;
   const oeeSoluk = oeeVeriYok ? 'soluk' : undefined;
   const oturumKapali = oee?.session_end != null;
-  const kesintiVar = hasGapNote(oee);
+  const kesintiNotu = gapNoteText(oee);
 
   return (
     <div className="sayfa">
@@ -148,10 +148,9 @@ function App() {
                     </span>
                   )}
                 </p>
-                {kesintiVar && (
-                  <p key="kesinti" className="kesinti-notu">
-                    Veri kesintisi: {formatDuration(oee.no_data_seconds)} veri yok · kesintide üretilen{' '}
-                    {oee.gap_parts.toLocaleString('tr-TR')} parça OEE dışında
+                {kesintiNotu && (
+                  <p key={kesintiNotu} className="kesinti-notu">
+                    {kesintiNotu}
                   </p>
                 )}
               </div>
@@ -187,10 +186,7 @@ function App() {
           <h2 id="trend-baslik">
             Trend <span className="etiket">örnek veri</span>
           </h2>
-          <h3 className="grafik-baslik">OEE, Availability, Performance ve Quality (5 dk aralıklarla)</h3>
-          <RatesTrend rows={TREND_SAMPLE} dark={karanlik} />
-          <h3 className="grafik-baslik">Üretim adedi (parça / 5 dk)</h3>
-          <ProductionTrend rows={TREND_SAMPLE} dark={karanlik} stepMinutes={TREND_STEP_MS / 60000} />
+          <TrendPanel rows={TREND_SAMPLE} dark={karanlik} stepMinutes={TREND_STEP_MS / 60000} />
           <details className="tablo-gorunumu">
             <summary>Tablo olarak göster</summary>
             <table>

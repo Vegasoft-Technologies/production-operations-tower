@@ -357,3 +357,32 @@
   border: 1px solid var(--stop);
   color: var(--text-h);
 }
+
+/* Trend paneli: ipucu ve sıfırlama */
+.trend-ust {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trend-ipucu {
+  font-size: 12px;
+  text-align: left;
+}
+
+.kucuk-buton {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.kucuk-buton:hover {
+  border-color: var(--text);
+}

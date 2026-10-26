@@ -73,6 +73,7 @@ OEE başlığının altında hangi alanın sorunlu olduğunu söyleyen kısa bir
   `total` ve `reject` değerini gösterir. Kartların altında oturumun başlangıç saati yazar.
 - Oturumda veri kesintisi olduysa kartın altında not çıkar: veri yok süresi ve kesintide
   üretilip OEE dışında kalan parça (`no_data_seconds >= 1` ya da `gap_parts > 0` ise).
+  Parça 0 ise parça kısmı yazılmaz (kesinti sürerken parça hep 0'dır).
 - `session_end` doluysa oturum kapanmıştır: kartlar son oturumu gösterir ve "Oturum kapandı" notu çıkar.
 - 15 sn'dir OEE mesajı gelmezse ya da bağlantı koparsa değerler soluk görünür.
 
@@ -97,6 +98,19 @@ OEE ve A, P, Q için zamana göre çizgi grafik, üretim adedi için alan grafik
 (`src/data/trendSample.js`). Veri olmayan aralıklar `null`'dır: çizgi orada kopar
 (`connectNulls: false`) ve gri "veri yok" bandı çizilir. Grafiğin altındaki
 "Tablo olarak göster" aynı veriyi tablo halinde gösterir.
+
+Yakınlaştırma ve kaydırma (ECharts `dataZoom`):
+
+- **Ctrl + fare tekerleği:** yakınlaştır / uzaklaştır (Ctrl'sız tekerlek sayfayı kaydırır)
+- **Sürükle:** yakınlaştırılmış aralığı sağa sola kaydır
+- **Alttaki çubuk:** tutamaçlarla aralık seç
+- **Tümünü göster:** yakınlaştırmayı sıfırlar
+
+İki grafik bağlıdır (`echarts.connect`): birinde yakınlaştırma, kaydırma ve araç ipucu
+diğerine de uygulanır. En fazla 15 dakikalık aralığa yakınlaşılır.
+
+Not: Ekran her saniye yenilenir. Grafik ayarları `useMemo` ile yalnızca veri ya da tema
+değişince yeniden oluşturulur; yoksa ECharts'a her saniye yeni ayar gider ve yakınlaştırma sıfırlanır.
 
 ## Sayaç kuralları (özet)
 

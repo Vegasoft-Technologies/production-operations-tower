@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOee, checkOee, hasGapNote } from '../src/lib/oeeMessage.js';
+import { parseOee, checkOee, hasGapNote, gapNoteText } from '../src/lib/oeeMessage.js';
 
 // Sözleşmedeki örnek mesajın aynısı
 const good = {
@@ -74,4 +74,14 @@ test('kesinti notu: no_data_seconds >= 1 ya da gap_parts > 0', () => {
   assert.equal(hasGapNote({ ...good, no_data_seconds: 1, gap_parts: 0 }), true);
   assert.equal(hasGapNote({ ...good, no_data_seconds: 0, gap_parts: 3 }), true);
   assert.equal(hasGapNote(null), false);
+});
+
+test('kesinti notu: parça 0 ise parça kısmı yazılmaz', () => {
+  assert.equal(gapNoteText({ ...good, no_data_seconds: 86, gap_parts: 0 }), 'Veri kesintisi: 1 dk 26 sn veri yok');
+  assert.equal(
+    gapNoteText({ ...good, no_data_seconds: 86, gap_parts: 69 }),
+    'Veri kesintisi: 1 dk 26 sn veri yok · kesintide üretilen 69 parça OEE dışında',
+  );
+  assert.equal(gapNoteText({ ...good, no_data_seconds: 0, gap_parts: 5 }), 'Veri kesintisi: kesintide üretilen 5 parça OEE dışında');
+  assert.equal(gapNoteText({ ...good, no_data_seconds: 0.4, gap_parts: 0 }), null);
 });
