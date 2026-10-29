@@ -44,6 +44,8 @@ Topic tam dört parçadır ve son parça `data` olur. Sayaç, oturum ve OEE kura
 
 OEE aynı `/stream` adresinden `event: oee` ile gider. Hesap veritabanındaki mesajlardan yapılır.
 
+`spBv1.0/Factory_1/#` dinlenir. NBIRTH ve DBIRTH çözülüp loglanır. Bu hafta veritabanına yazılmaz.
+
 ```bash
 pytest
 ```
