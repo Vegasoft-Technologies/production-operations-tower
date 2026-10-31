@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from app import db
+from app.sparkplug import TOPIC as SPARKPLUG_TOPIC
+from app.sparkplug import read_sparkplug
 
 log = logging.getLogger("oee")
 FIELDS = ("factory", "line", "machine", "ts", "status", "total_count", "reject_count")
@@ -92,7 +94,9 @@ def on_connect(client, _userdata, _flags, reason_code, _properties) -> None:
         if reason_code == 0:
             topic = mqtt_topic()
             client.subscribe(topic)
+            client.subscribe(SPARKPLUG_TOPIC)
             log.info("abone olundu: %s", topic)
+            log.info("abone olundu: %s", SPARKPLUG_TOPIC)
             return
         log.warning("broker bağlantısı reddedildi")
     except Exception:
@@ -115,10 +119,18 @@ def shown(message) -> tuple[str, str]:
 def on_message(_client, _userdata, message) -> None:
     topic, raw = "?", ""
     try:
+        topic = getattr(message, "topic", "?")
+        payload = getattr(message, "payload", b"")
+        if isinstance(topic, str) and topic.startswith("spBv1.0/"):
+            if not isinstance(payload, (bytes, bytearray)):
+                return
+            text = read_sparkplug(topic, bytes(payload))
+            if text:
+                log.info("%s", text)
+            return
         topic, raw = shown(message)
         if not data_topic(topic):
             return
-        log.info("topic=%s payload=%s", topic, raw)
         clean = checked(json.loads(raw), topic)
         if clean is None:
             log.warning("sözleşmeye uymayan mesaj topic=%s payload=%s", topic, raw)
