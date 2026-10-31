@@ -1,6 +1,6 @@
 from app.session import receive
-from app.sparkplug import birth_text, source_change, sparkplug_b_pb2 as pb
-from app.sparkplug import sparkplug_silence, sparkplug_step
+from app.sparkplug import between, birth_text, read_sparkplug, sparkplug_b_pb2 as pb
+from app.sparkplug import sparkplug_periods, sparkplug_step
 
 
 def payload() -> pb.Payload:
@@ -67,27 +67,90 @@ def test_plc_yeniden_basladi():
     assert kept["increase"] == 3
 
 
+def test_gizli_yeniden_baslama():
+    step = sparkplug_step(1000, 10, 30, 60, reset=True)
+    assert step["restarted"] is True
+    assert step["elapsed"] == 30
+    assert step["increase"] == 10
+
+
+def test_iki_sayac_tek_karar():
+    step = sparkplug_step(10760, 3, 8200, 5, reject_old=2, reject_new=5, reset=True)
+    assert step["restarted"] is True
+    assert step["increase"] == 3
+    assert step["reject"] == 5
+
+
 def test_kaynak_degisimi():
-    step = source_change("json", "sparkplug", 30)
+    start = 1_700_000_000_000
+    left = {"source": "json", "ts": start, "total_count": 1517}
+    right = {
+        "source": "sparkplug",
+        "ts": start + 30_000,
+        "total_count": 5000,
+        "uptime": 1000,
+    }
+    step = between(left, right)
     assert step["increase"] is None
     assert step["no_data_seconds"] == 30
     assert step["close_session"] is False
-    start = 1_700_000_000_000
-    session, _closed, opened = receive(None, start)
+    session, _closed, opened = receive(None, left["ts"])
     assert opened
-    session, closed, opened = receive(session, start + 30_000)
+    session, closed, opened = receive(session, right["ts"])
     assert closed is None
     assert session["end"] is None
     assert not opened
-    nxt = sparkplug_step(5000, 5001, 1000, 1001)
-    assert nxt["increase"] == 1
+    third = {
+        "source": "sparkplug",
+        "ts": start + 31_000,
+        "total_count": 5001,
+        "uptime": 1001,
+    }
+    assert between(right, third)["increase"] == 1
 
 
 def test_sparkplug_kesinti():
-    gap = sparkplug_silence("ddeath", 120)
+    gap = sparkplug_periods(
+        [
+            {"kind": "ddeath", "ts": 0},
+            {"kind": "dbirth", "ts": 120_000},
+        ]
+    )
     assert gap["no_data_seconds"] == 120
     assert gap["stop_seconds"] == 0
-    assert sparkplug_silence("ndeath", 120)["no_data_seconds"] == 120
-    stopped = sparkplug_silence("silent", 300, status=False)
+    stopped = sparkplug_periods(
+        [
+            {"kind": "ddata", "ts": 0, "status": False},
+            {"kind": "ddata", "ts": 300_000, "status": False},
+        ]
+    )
     assert stopped["no_data_seconds"] == 0
     assert stopped["stop_seconds"] == 300
+    node = sparkplug_periods([{"kind": "nbirth", "ts": 120_000}], ndeath_ts=0)
+    assert node["no_data_seconds"] == 120
+    assert node["stop_seconds"] == 0
+
+
+def test_dbirth_uyari(caplog):
+    data = payload()
+    add(data, "status", 10, 11, boolean_value=True)
+    add(data, "total_count", 99, 7, int_value=1)
+    with caplog.at_level("WARNING", logger="oee"):
+        birth_text(
+            "spBv1.0/Factory_1/DBIRTH/Production_Line_1/Machine_1",
+            data.SerializeToString(),
+        )
+    text = " ".join(record.message for record in caplog.records)
+    assert "eksik metrik" in text
+    assert "uyumsuz" in text
+
+
+def test_bozuk_sparkplug(caplog):
+    with caplog.at_level("WARNING", logger="oee"):
+        got = read_sparkplug(
+            "spBv1.0/Factory_1/DBIRTH/Production_Line_1/Machine_1",
+            b"\xff\xff\xff\xff",
+        )
+    assert got is None
+    assert any("sparkplug çözülemedi" in record.message for record in caplog.records)
+    assert all(record.exc_info is None or record.exc_info == (None, None, None) for record in caplog.records)

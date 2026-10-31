@@ -12,7 +12,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app import db
 from app.sparkplug import TOPIC as SPARKPLUG_TOPIC
-from app.sparkplug import birth_text
+from app.sparkplug import read_sparkplug
 
 log = logging.getLogger("oee")
 FIELDS = ("factory", "line", "machine", "ts", "status", "total_count", "reject_count")
@@ -124,7 +124,7 @@ def on_message(_client, _userdata, message) -> None:
         if isinstance(topic, str) and topic.startswith("spBv1.0/"):
             if not isinstance(payload, (bytes, bytearray)):
                 return
-            text = birth_text(topic, bytes(payload))
+            text = read_sparkplug(topic, bytes(payload))
             if text:
                 log.info("%s", text)
             return
